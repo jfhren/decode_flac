@@ -16,7 +16,7 @@ second argument or if it is `-`, the pcm stream is outputted on the standard
 output. Else the second argument should be the output file.
 
 Checking the md5 of the outputted pcm against the md5 provided in the metadata
-of the flac file is the main goal. To do that you type:
+of the flac file is the main goal. To do that you can type:
 
 `$ ./bin/decode_flac_to_pcm some_flac_file.flac some_flac_file.pcm && md5sum
 some_flac_file.pcm`
