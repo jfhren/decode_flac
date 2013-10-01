@@ -28,4 +28,5 @@ You can also add `--big-endian` to output pcm with big endian order. To compare
 the md5, you can output big endian order pcm with mplayer for example:
 `mplayer -ao pcm:nowaveheader:file=some_filename.pcm -format s16be
 some_flac_file.flac`
+
 Be sure to match the number of bits per sample though.
