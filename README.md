@@ -20,7 +20,7 @@ of the flac file is the main goal. To do that you can type:
 
 `$ ./bin/decode_flac_to_pcm some_flac_file.flac some_flac_file.pcm && md5sum
 some_flac_file.pcm`  
-or
+or  
 `$ ./bin/decode_flac_to_pcm some_flac_file.flac | md5sum`  
 and compare the md5 sums.
 
