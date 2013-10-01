@@ -15,8 +15,8 @@ To use it, you have to give it a flac file as first argument. If there is no
 second argument or if it is `-`, the pcm stream is outputted on the standard
 output. Else the second argument should be the output file.
 
-Checking the md5 of the outputted pcm against the md5 provided in the metadata
-of the flac file is the main goal. To do that you can type:  
+Checking the md5 sum of the outputted pcm against the md5 sum provided in the
+metadata of the flac file is the main goal. To do that you can type:  
 `$ ./bin/decode_flac_to_pcm some_flac_file.flac some_flac_file.pcm && md5sum
 some_flac_file.pcm`  
 or  
@@ -24,7 +24,7 @@ or
 and compare the md5 sums.
 
 You can also add `--big-endian` to output pcm with big endian order. To compare
-the md5, you can output big endian order pcm with mplayer for example:  
+the md5 sums, you can output big endian order pcm with mplayer for example:  
 `mplayer -ao pcm:nowaveheader:file=some_filename.pcm -format s16be
 some_flac_file.flac`  
 Be sure to match the number of bits per sample though.
