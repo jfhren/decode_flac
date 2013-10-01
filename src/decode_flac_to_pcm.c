@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <string.h>
 
 #include "decode_flac.h"
@@ -19,16 +20,31 @@
 
 int main(int argc, char* argv[]) {
 
+    int opt = -1;
+    struct option options[] = {{"big-endian", 0, NULL, 'b'}, {NULL, 0, NULL, 0}};
     data_input_t data_input = {0};
     data_output_t data_output = {0};
     stream_info_t stream_info = {0};
 
-    if((argc != 2) && (argc != 3)) {
-        fprintf(stderr, "Usage: %s flac_file [output_filename]\n", argv[0]);
+    data_output.is_little_endian = 1;
+
+    while((opt = getopt_long(argc, argv, "", options, NULL)) > -1)
+        switch(opt) {
+            case 'b':
+                data_output.is_little_endian = 0;
+                break;
+
+            case '?':
+                fprintf(stderr, "Usage: %s [--big-endian] flac_file [output_filename]\n", argv[0]);
+                return EXIT_FAILURE;
+        }
+
+    if(optind == argc) {
+        fprintf(stderr, "Usage: %s [--big-endian] flac_file [output_filename]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    if((data_input.fd = open(argv[1], O_RDONLY)) == -1) {
+    if((data_input.fd = open(argv[optind++], O_RDONLY)) == -1) {
         perror("An error occured while opening the flac file");
         return EXIT_FAILURE;
     }
@@ -49,10 +65,10 @@ int main(int argc, char* argv[]) {
     if(decode_flac_metadata(&data_input, &stream_info) == -1)
         return EXIT_FAILURE;
 
-    if((argc == 2) || (strcmp(argv[2], "-") == 0)) {
+    if((optind == argc) || (strcmp(argv[optind], "-") == 0)) {
         data_output.fd = 1;
     } else {
-        if((data_output.fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR)) == -1) {
+        if((data_output.fd = open(argv[optind], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR)) == -1) {
             perror("An error occured while opening the output_file");
             return EXIT_FAILURE;
         }
@@ -78,7 +94,6 @@ int main(int argc, char* argv[]) {
     data_output.starting_shift = 0;
     data_output.position = 0;
     data_output.shift = 0;
-    data_output.is_little_endian = 1;
 
     if(decode_flac_data(&data_input, &data_output, &stream_info) == -1)
         return EXIT_FAILURE;
