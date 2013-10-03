@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 typedef struct {
-    /* Where to write when dumping */
+    /* Where to write when dumping. */
     int fd;
     /* Used to buffer written data. */
     uint8_t* buffer;
@@ -26,8 +26,10 @@ typedef struct {
     int position;
     /* The current bit shift inside the current byte. */
     uint8_t shift;
-    /* Should the output be little endian style or not (that is big endian) */
+    /* Should the output be little endian style or not (that is big endian). */
     uint8_t is_little_endian;
+    /* Should the output be signed or not. */
+    uint8_t is_signed;
 } data_output_t;
 
 

@@ -81,11 +81,17 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
             if(channel_nb == 0) {
                 switch(sample_size) {
                     case 8:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 8) + 128);
+
                         buffer[position] = sample & 0xFF;
                         data_output->position += 2;
                         break;
 
                     case 12:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 12) + 2048);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 4) & 0xF0;
@@ -97,6 +103,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 16:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 16) + 32768);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 8) & 0xFF;
@@ -108,6 +117,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 20:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 20) + 524288);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 8) & 0xFF;
@@ -121,6 +133,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 24:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 24) + 8388608);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 8) & 0xFF;
@@ -134,6 +149,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 32:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 32) + 2147483648u);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 8) & 0xFF;
@@ -146,7 +164,6 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position + 3] = sample & 0xFF;
                         }
                         data_output->position += 8;
-                        
                 }
             } else {
                 uint64_t uleft = 0;
@@ -320,97 +337,97 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
 
                     case 8:
                         difference = convert_to_signed((buffer[position - 1] << 1) | (buffer[position] & 0x01), 9);
-                        right = convert_to_signed(sample, 8);
+                        right = convert_to_signed(sample, 8) + 128;
                         uleft = (uint64_t)(right + difference);
 
                         buffer[position - 1] = uleft & 0xFF;
-                        buffer[position] = sample & 0xFF;
+                        buffer[position] = right & 0xFF;
                         data_output->position += 2;
                         break;
 
                     case 12:
                         difference = convert_to_signed((buffer[position - 1] << 5) | (buffer[position] & 0x1F), 13);
-                        right = convert_to_signed(sample, 12);
+                        right = convert_to_signed(sample, 12) + 2048;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
                             buffer[position - 1] = uleft & 0xFF;
-                            buffer[position] = ((uleft >> 4) & 0xF0) | ((sample >> 4) & 0x0F);
-                            buffer[position + 1] = ((sample << 4) & 0xF0) | ((sample >> 8) & 0x0F);
+                            buffer[position] = ((uleft >> 4) & 0xF0) | ((right >> 4) & 0x0F);
+                            buffer[position + 1] = ((right << 4) & 0xF0) | ((right >> 8) & 0x0F);
                         } else {
                             buffer[position - 1] = (uleft >> 4) & 0xFF;
-                            buffer[position] = ((uleft << 4) & 0xF0) | ((sample >> 8) & 0x0F);
-                            buffer[position + 1] = sample & 0xFF;
+                            buffer[position] = ((uleft << 4) & 0xF0) | ((right >> 8) & 0x0F);
+                            buffer[position + 1] = right & 0xFF;
                         }
                         data_output->position += 3;
                         break;
 
                     case 16:
                         difference = convert_to_signed((buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 17);
-                        right = convert_to_signed(sample, 16);
+                        right = convert_to_signed(sample, 16) + 32768;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
                             buffer[position - 2] = uleft & 0xFF;
                             buffer[position - 1] = (uleft >> 8) & 0xFF;
-                            buffer[position] = sample & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
+                            buffer[position] = right & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
                         } else {
                             buffer[position - 2] = (uleft >> 8) & 0xFF;
                             buffer[position - 1] = uleft & 0xFF;
-                            buffer[position] = (sample >> 8) & 0xFF;
-                            buffer[position + 1] = sample & 0xFF;
+                            buffer[position] = (right >> 8) & 0xFF;
+                            buffer[position + 1] = right & 0xFF;
                         }
                         data_output->position += 4;
                         break;
 
                     case 20:
                         difference = convert_to_signed((buffer[position - 2] << 13) | (buffer[position - 1] << 5) | (buffer[position] & 0x1F), 21);
-                        right = convert_to_signed(sample, 20);
+                        right = convert_to_signed(sample, 20) + 524288;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
                             buffer[position - 2] = uleft & 0xFF;
                             buffer[position - 1] = (uleft >> 8) & 0xFF;
-                            buffer[position] = ((uleft >> 12) & 0xF0) | ((sample >> 4) & 0x0F);
-                            buffer[position + 1] = ((sample << 4) & 0xF0) | ((sample >> 12) & 0x0F);
-                            buffer[position + 2] = ((sample >> 4) & 0xF0) | ((sample >> 16) & 0x0F);
+                            buffer[position] = ((uleft >> 12) & 0xF0) | ((right >> 4) & 0x0F);
+                            buffer[position + 1] = ((right << 4) & 0xF0) | ((right >> 12) & 0x0F);
+                            buffer[position + 2] = ((right >> 4) & 0xF0) | ((right >> 16) & 0x0F);
                         } else {
                             buffer[position - 2] = (uleft >> 12) & 0xFF;
                             buffer[position - 1] = (uleft >> 4) & 0xFF;
-                            buffer[position] = ((uleft << 4) & 0xF0) | ((sample >> 16) & 0x0F);
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                            buffer[position + 2] = sample & 0xFF;
+                            buffer[position] = ((uleft << 4) & 0xF0) | ((right >> 16) & 0x0F);
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                            buffer[position + 2] = right & 0xFF;
                         }
                         data_output->position += 5;
                         break;
 
                     case 24:
                         difference = convert_to_signed((buffer[position - 3] << 17) | (buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 25);
-                        right = convert_to_signed(sample, 24);
+                        right = convert_to_signed(sample, 24) + 8388608;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
                             buffer[position - 3] = uleft & 0xFF;
                             buffer[position - 2] = (uleft >> 8) & 0xFF;
                             buffer[position - 1] = (uleft >> 16) & 0xFF;
-                            buffer[position] = sample & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                            buffer[position + 2] = (sample >> 16) & 0xFF;
+                            buffer[position] = right & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                            buffer[position + 2] = (right >> 16) & 0xFF;
                         } else {
                             buffer[position - 3] = (uleft >> 16) & 0xFF;
                             buffer[position - 2] = (uleft >> 8) & 0xFF;
                             buffer[position - 1] = uleft & 0xFF;
-                            buffer[position] = (sample >> 16) & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                            buffer[position + 2] = sample & 0xFF;
+                            buffer[position] = (right >> 16) & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                            buffer[position + 2] = right & 0xFF;
                         }
                         data_output->position += 6;
                         break;
 
                     case 32:
                         difference = convert_to_signed((buffer[position - 4] << 25) | (buffer[position - 3] << 17) | (buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 33);
-                        right = convert_to_signed(sample, 32);
+                        right = convert_to_signed(sample, 32) + 2147483648u;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
@@ -418,19 +435,19 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position - 3] = (uleft >> 8) & 0xFF;
                             buffer[position - 2] = (uleft >> 16) & 0xFF;
                             buffer[position - 1] = (uleft >> 24) & 0xFF;
-                            buffer[position] = sample & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                            buffer[position + 2] = (sample >> 16) & 0xFF;
-                            buffer[position + 3] = (sample >> 24) & 0xFF;
+                            buffer[position] = right & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                            buffer[position + 2] = (right >> 16) & 0xFF;
+                            buffer[position + 3] = (right >> 24) & 0xFF;
                         } else {
                             buffer[position - 4] = (uleft >> 24) & 0xFF;
                             buffer[position - 3] = (uleft >> 16) & 0xFF;
                             buffer[position - 2] = (uleft >> 8) & 0xFF;
                             buffer[position - 1] = uleft & 0xFF;
-                            buffer[position] = (sample >> 24) & 0xFF;
-                            buffer[position + 1] = (sample >> 16) & 0xFF;
-                            buffer[position + 2] = (sample >> 8) & 0xFF;
-                            buffer[position + 3] = sample & 0xFF;
+                            buffer[position] = (right >> 24) & 0xFF;
+                            buffer[position + 1] = (right >> 16) & 0xFF;
+                            buffer[position + 2] = (right >> 8) & 0xFF;
+                            buffer[position + 3] = right & 0xFF;
                         }
                         data_output->position += 8;
                 }
@@ -491,6 +508,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         left = (uint64_t)((((mid << 1) | (side & 0x1)) + side) >> 1);
                         right = (uint64_t)((((mid << 1) | (side & 0x1)) - side) >> 1);
 
+                        if(!data_output->is_signed) {
+                            left += 128;
+                            right += 128;
+                        }
+
                         buffer[position - 1] = left & 0xFF;
                         buffer[position] = right & 0xFF;
                         data_output->position += 2;
@@ -501,6 +523,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         side = convert_to_signed(sample, 13);
                         left = (uint64_t)((((mid << 1) | (side & 0x1)) + side) >> 1);
                         right = (uint64_t)((((mid << 1) | (side & 0x1)) - side) >> 1);
+
+                        if(!data_output->is_signed) {
+                            left += 2048;
+                            right += 2048;
+                        }
 
                         if(data_output->is_little_endian) {
                             buffer[position - 1] = left & 0xFF;
@@ -519,6 +546,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         side = convert_to_signed(sample, 17);
                         left = (uint64_t)((((mid << 1) | (side & 0x1)) + side) >> 1);
                         right = (uint64_t)((((mid << 1) | (side & 0x1)) - side) >> 1);
+
+                        if(!data_output->is_signed) {
+                            left += 32768;
+                            right += 32768;
+                        }
 
                         if(data_output->is_little_endian) {
                             buffer[position - 2] = left & 0xFF;
@@ -539,6 +571,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         side = convert_to_signed(sample, 21);
                         left = (uint64_t)((((mid << 1) | (side & 0x1)) + side) >> 1);
                         right = (uint64_t)((((mid << 1) | (side & 0x1)) - side) >> 1);
+
+                        if(!data_output->is_signed) {
+                            left += 524288;
+                            right += 524288;
+                        }
 
                         if(data_output->is_little_endian) {
                             buffer[position - 2] = left & 0xFF;
@@ -561,6 +598,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         side = convert_to_signed(sample, 25);
                         left = (uint64_t)((((mid << 1) | (side & 0x1)) + side) >> 1);
                         right = (uint64_t)((((mid << 1) | (side & 0x1)) - side) >> 1);
+
+                        if(!data_output->is_signed) {
+                            left += 8388608;
+                            right += 8388608;
+                        }
 
                         if(data_output->is_little_endian) {
                             buffer[position - 3] = left & 0xFF;
@@ -585,6 +627,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         side = convert_to_signed(sample, 33);
                         left = (uint64_t)((((mid << 1) | (side & 0x1)) + side) >> 1);
                         right = (uint64_t)((((mid << 1) | (side & 0x1)) - side) >> 1);
+
+                        if(!data_output->is_signed) {
+                            left += 2147483648;
+                            right += 2147483648;
+                        }
 
                         if(data_output->is_little_endian) {
                             buffer[position - 4] = left & 0xFF;
@@ -614,11 +661,17 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
             if(shift == 0) {
                 switch(sample_size) {
                     case 8:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 8) + 128);
+
                         buffer[position] = sample & 0xFF;
                         data_output->position += (channel_assignement + 1);
                         break;
 
                     case 12:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 12) + 2048);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] &= 0x0F;
@@ -668,6 +721,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 16:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 16) + 32768);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 8) & 0xFF;
@@ -680,6 +736,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 20:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 20) + 524288);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 8) & 0xFF;
@@ -731,6 +790,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 24:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 24) + 8388608);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 8) & 0xFF;
@@ -745,6 +807,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 32:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 32) + 2147483648);
+
                         if(data_output->is_little_endian) {
                             buffer[position] = sample & 0xFF;
                             buffer[position + 1] = (sample >> 8) & 0xFF;
@@ -762,6 +827,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
             } else {                    /* If the shift is not 0 then it should 4 */
                 switch(sample_size) {
                     case 12:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 12) + 2048);
+
                         if(data_output->is_little_endian) {
                             buffer[position] &= 0xF0;
                             buffer[position] |= ((sample >> 4) & 0x0F);
@@ -811,6 +879,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                         break;
 
                     case 20:
+                        if(!data_output->is_signed)
+                            sample = (uint64_t)(convert_to_signed(sample, 20) + 524288);
+
                         if(data_output->is_little_endian) {
                             buffer[position] &= 0xF0;
                             buffer[position] |= (sample >> 4) & 0x0F;

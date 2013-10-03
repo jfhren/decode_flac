@@ -21,12 +21,13 @@
 int main(int argc, char* argv[]) {
 
     int opt = -1;
-    struct option options[] = {{"big-endian", 0, NULL, 'b'}, {NULL, 0, NULL, 0}};
+    struct option options[] = {{"unsigned", 0, NULL, 'u'}, {"big-endian", 0, NULL, 'b'}, {NULL, 0, NULL, 0}};
     data_input_t data_input = {0};
     data_output_t data_output = {0};
     stream_info_t stream_info = {0};
 
     data_output.is_little_endian = 1;
+    data_output.is_signed = 1;
 
     while((opt = getopt_long(argc, argv, "", options, NULL)) > -1)
         switch(opt) {
@@ -34,13 +35,17 @@ int main(int argc, char* argv[]) {
                 data_output.is_little_endian = 0;
                 break;
 
+            case 'u':
+                data_output.is_signed = 0;
+                break;
+
             case '?':
-                fprintf(stderr, "Usage: %s [--big-endian] flac_file [output_filename]\n", argv[0]);
+                fprintf(stderr, "Usage: %s [--big-endian] [--unsigned] flac_file [output_filename]\n", argv[0]);
                 return EXIT_FAILURE;
         }
 
     if(optind == argc) {
-        fprintf(stderr, "Usage: %s [--big-endian] flac_file [output_filename]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--big-endian] [--unsigned] flac_file [output_filename]\n", argv[0]);
         return EXIT_FAILURE;
     }
 

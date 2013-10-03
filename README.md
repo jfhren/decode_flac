@@ -23,8 +23,15 @@ or
 `$ ./bin/decode_flac_to_pcm some_flac_file.flac | md5sum`  
 and compare the md5 sums.
 
-You can also add `--big-endian` to output pcm with big endian order. To compare
-the md5 sums, you can output big endian order pcm with mplayer for example:  
+You can add `--big-endian` to output pcm with big endian order. To compare the
+md5 sums, you can output big endian order pcm with mplayer for example:  
 `mplayer -ao pcm:nowaveheader:file=some_filename.pcm -format s16be
 some_flac_file.flac`  
 Be sure to match the number of bits per sample though.
+
+You can also add `--unsigned` to output pcm with unsigned samples. To compare
+the md5 sums, you can output unsigned samples pcm with mplayer for example:  
+`mplayer -ao pcm:nowaveheader:file=some_filename.pcm -format u16le
+some_flac_file.flac`  
+Be sure to match the number of bits per sample though. You can combine these
+options.
