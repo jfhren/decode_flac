@@ -930,6 +930,13 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
     if(error_code == 0)
         return 0;
 
+    #ifdef STEREO_ONLY
+    if((frame_info.channel_assignement != LEFT_RIGHT) && (frame_info.channel_assignement != LEFT_SIDE) && (frame_info.channel_assignement != RIGHT_SIDE) && (frame_info.channel_assignement != MID_SIDE)) {
+        fprintf(stderr, "Stereo only is supported\n");
+        return -1;
+    }
+    #endif
+
     data_output->starting_position = data_output->position;
     data_output->starting_shift = data_output->shift;
 

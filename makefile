@@ -1,5 +1,6 @@
 CC := gcc
 CFLAGS := -pedantic -W -Wall -Werror -std=c99 -g
+#CFLAGS := -pedantic -W -Wall -Werror -std=c99 -g -DSTEREO_ONLY
 SRC_DIR := ./src/
 OBJ_DIR := ./obj/
 BIN_DIR := ./bin/

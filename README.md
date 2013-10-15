@@ -8,6 +8,9 @@ in an output file or on the standard output.
 
 Typing `make` should do the trick. The built binary should be in the *bin*
 directory.
+You can tweak the makefile to add the STEREO_ONLY macro to compile a version
+supporting only stereo channel assignments (LEFT_RIGHT, LEFT_SIDE, RIGHT_SIDE,
+MID_SIDE).
 
 ## Usage
 

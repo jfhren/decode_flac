@@ -21,7 +21,7 @@ typedef struct {
     /* Where does the current frame start in the buffer. */
     int starting_position;
     /* What was the current shift before the current frame. */
-    int starting_shift;
+    uint8_t starting_shift;
     /* The current write position in the buffer. */
     int position;
     /* The current bit shift inside the current byte. */

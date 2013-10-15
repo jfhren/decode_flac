@@ -337,7 +337,10 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
 
                     case 8:
                         difference = convert_to_signed((buffer[position - 1] << 1) | (buffer[position] & 0x01), 9);
-                        right = convert_to_signed(sample, 8) + 128;
+                        if(data_output->is_signed)
+                            right = convert_to_signed(sample, 8);
+                        else
+                            right = convert_to_signed(sample, 8) + 128;
                         uleft = (uint64_t)(right + difference);
 
                         buffer[position - 1] = uleft & 0xFF;
@@ -347,7 +350,10 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
 
                     case 12:
                         difference = convert_to_signed((buffer[position - 1] << 5) | (buffer[position] & 0x1F), 13);
-                        right = convert_to_signed(sample, 12) + 2048;
+                        if(data_output->is_signed)
+                            right = convert_to_signed(sample, 12);
+                        else
+                            right = convert_to_signed(sample, 12) + 2048;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
@@ -364,7 +370,10 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
 
                     case 16:
                         difference = convert_to_signed((buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 17);
-                        right = convert_to_signed(sample, 16) + 32768;
+                        if(data_output->is_signed)
+                            right = convert_to_signed(sample, 16);
+                        else
+                            right = convert_to_signed(sample, 16) + 32768;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
@@ -383,7 +392,10 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
 
                     case 20:
                         difference = convert_to_signed((buffer[position - 2] << 13) | (buffer[position - 1] << 5) | (buffer[position] & 0x1F), 21);
-                        right = convert_to_signed(sample, 20) + 524288;
+                        if(data_output->is_signed)
+                            right = convert_to_signed(sample, 20);
+                        else
+                            right = convert_to_signed(sample, 20) + 524288;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
@@ -404,7 +416,10 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
 
                     case 24:
                         difference = convert_to_signed((buffer[position - 3] << 17) | (buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 25);
-                        right = convert_to_signed(sample, 24) + 8388608;
+                        if(data_output->is_signed)
+                            right = convert_to_signed(sample, 24);
+                        else
+                            right = convert_to_signed(sample, 24) + 8388608;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
@@ -427,7 +442,10 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
 
                     case 32:
                         difference = convert_to_signed((buffer[position - 4] << 25) | (buffer[position - 3] << 17) | (buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 33);
-                        right = convert_to_signed(sample, 32) + 2147483648u;
+                        if(data_output->is_signed)
+                            right = convert_to_signed(sample, 32);
+                        else
+                            right = convert_to_signed(sample, 32) + 2147483648u;
                         uleft = (uint64_t)(right + difference);
 
                         if(data_output->is_little_endian) {
@@ -665,7 +683,12 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             sample = (uint64_t)(convert_to_signed(sample, 8) + 128);
 
                         buffer[position] = sample & 0xFF;
+
+                        #ifdef STEREO_ONLY
+                        data_output->position += 2;
+                        #else
                         data_output->position += (channel_assignement + 1);
+                        #endif
                         break;
 
                     case 12:
@@ -682,6 +705,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position + 1] |= (sample << 4) & 0xF0;
                         }
 
+                        #ifdef STEREO_ONLY
+                            data_output->position += 3;
+                        #else
                         switch(channel_assignement) {
                             case MONO:
                                 data_output->position += 1;
@@ -718,6 +744,7 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             case F_LEFT_F_RIGHT_F_CENTER_LFE_B_LEFT_B_RIGHT_S_LEFT_S_RIGHT:
                                 data_output->position += 12;
                         }
+                        #endif
                         break;
 
                     case 16:
@@ -732,7 +759,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position + 1] = sample & 0xFF;
                         }
 
+                        #ifdef STEREO_ONLY
+                        data_output->position += 4;
+                        #else
                         data_output->position += (2 * (channel_assignement + 1));
+                        #endif
                         break;
 
                     case 20:
@@ -751,6 +782,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position + 2] |= (sample << 4) & 0xF0;
                         }
 
+                        #ifdef STEREO_ONLY
+                        data_output->position += 5;
+                        #else
                         switch(channel_assignement) {
                             case MONO:
                                 data_output->position += 2;
@@ -787,6 +821,7 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             case F_LEFT_F_RIGHT_F_CENTER_LFE_B_LEFT_B_RIGHT_S_LEFT_S_RIGHT:
                                 data_output->position += 20;
                         }
+                        #endif
                         break;
 
                     case 24:
@@ -803,7 +838,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position + 2] = sample & 0xFF;
                         }
 
+                        #ifdef STEREO_ONLY
+                        data_output->position += 6;
+                        #else
                         data_output->position += (3 * (channel_assignement + 1));
+                        #endif
                         break;
 
                     case 32:
@@ -822,7 +861,11 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position + 3] = sample & 0xFF;
                         }
 
+                        #ifdef STEREO_ONLY
+                        data_output->position += 8;
+                        #else
                         data_output->position += (4 * (channel_assignement + 1));
+                        #endif
                 }
             } else {                    /* If the shift is not 0 then it should 4 */
                 switch(sample_size) {
@@ -840,6 +883,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position + 1] = sample & 0xFF;
                         }
 
+                        #ifdef STEREO_ONLY
+                        data_output->position += 2;
+                        #else
                         switch(channel_assignement) {
                             case MONO:
                                 data_output->position += 2;
@@ -876,6 +922,7 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             case F_LEFT_F_RIGHT_F_CENTER_LFE_B_LEFT_B_RIGHT_S_LEFT_S_RIGHT:
                                 data_output->position += 12;
                         }
+                        #endif
                         break;
 
                     case 20:
@@ -894,6 +941,9 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             buffer[position + 2] = sample & 0xFF;
                         }
 
+                        #ifdef STEREO_ONLY
+                        data_output->position += 5;
+                        #else
                         switch(channel_assignement) {
                             case MONO:
                                 data_output->position += 1;
@@ -930,6 +980,7 @@ int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample
                             case F_LEFT_F_RIGHT_F_CENTER_LFE_B_LEFT_B_RIGHT_S_LEFT_S_RIGHT:
                                 data_output->position += 20;
                         }
+                        #endif
                 }
 
             }

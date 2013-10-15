@@ -19,17 +19,24 @@
 #define SUBFRAME_LPC_LOW    32
 #define SUBFRAME_LPC_HIGH   63
 
-#define MONO                                                      0
-#define LEFT_RIGHT                                                1
-#define LEFT_RIGHT_CENTER                                         2
-#define F_LEFT_F_RIGHT_B_LEFT_B_RIGHT                             3
-#define F_LEFT_F_RIGHT_F_CENTER_B_LEFT_B_RIGHT                    4
-#define F_LEFT_F_RIGHT_F_CENTER_LFE_B_LEFT_B_RIGHT                5
-#define F_LEFT_F_RIGHT_F_CENTER_LFE_B_CENTER_S_LEFT_S_RIGHT       6
-#define F_LEFT_F_RIGHT_F_CENTER_LFE_B_LEFT_B_RIGHT_S_LEFT_S_RIGHT 7
-#define LEFT_SIDE                                                 8
-#define RIGHT_SIDE                                                9
-#define MID_SIDE                                                  10
+#ifndef STEREO_ONLY
+    #define MONO                                                      0
+#endif
+
+#define LEFT_RIGHT                                                    1
+
+#ifndef STEREO_ONLY
+    #define LEFT_RIGHT_CENTER                                         2
+    #define F_LEFT_F_RIGHT_B_LEFT_B_RIGHT                             3
+    #define F_LEFT_F_RIGHT_F_CENTER_B_LEFT_B_RIGHT                    4
+    #define F_LEFT_F_RIGHT_F_CENTER_LFE_B_LEFT_B_RIGHT                5
+    #define F_LEFT_F_RIGHT_F_CENTER_LFE_B_CENTER_S_LEFT_S_RIGHT       6
+    #define F_LEFT_F_RIGHT_F_CENTER_LFE_B_LEFT_B_RIGHT_S_LEFT_S_RIGHT 7
+#endif
+
+#define LEFT_SIDE                                                     8
+#define RIGHT_SIDE                                                    9
+#define MID_SIDE                                                      10
 
 typedef struct {
     /* The minimum number of samples in a block (across channels.) */
