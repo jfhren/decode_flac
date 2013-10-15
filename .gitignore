@@ -1,5 +1,6 @@
 # Object files
 *.o
+obj/
 
 # Libraries
 *.lib
@@ -15,6 +16,7 @@
 *.exe
 *.out
 *.app
+bin/
 
 # Vim
 *.swp
