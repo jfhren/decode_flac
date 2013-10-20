@@ -5,6 +5,8 @@
  * as published by Sam Hocevar. See the COPYING file for more details.
  */
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -86,7 +88,7 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "sample_rate: %u\n", stream_info.sample_rate);
     fprintf(stderr, "nb_channels: %u\n", stream_info.nb_channels);
     fprintf(stderr, "bits_per_sample: %u\n", stream_info.bits_per_sample);
-    fprintf(stderr, "nb_samples: %lu\n", stream_info.nb_samples);
+    fprintf(stderr, "nb_samples: %" PRIu64 "\n", stream_info.nb_samples);
 
     data_output.size = (stream_info.nb_samples * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
     data_output.buffer = (uint8_t*)malloc(sizeof(uint8_t) * data_output.size);
