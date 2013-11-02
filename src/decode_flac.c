@@ -60,7 +60,9 @@ static int get_flac_stream_info(data_input_t* data_input, stream_info_t* stream_
     stream_info->bits_per_sample = (((buffer[position] & 0x01) << 4) | (buffer[position + 1] >> 4)) + 1;
     position += 1;
 
+#ifndef DISALLOW_64_BITS
     stream_info->nb_samples = (((uint64_t)buffer[position] & 0x0F) << 32) | (buffer[position + 1] << 24) | (buffer[position + 2] << 16) | (buffer[position + 3] << 8) | buffer[position + 4];
+#endif
 
     position += 5;
 
@@ -205,7 +207,9 @@ static int read_frame_header(data_input_t* data_input, stream_info_t* stream_inf
     }
 
     if(blocking_strategy) {
+#ifndef DISALLOW_64_BITS
         uint64_t sample_nb = 0;
+#endif
         uint8_t nb_coding_bytes = 1;
 
         if((buffer[position] & 0x80) && (buffer[position] & 0x40)) {
@@ -224,6 +228,9 @@ static int read_frame_header(data_input_t* data_input, stream_info_t* stream_inf
                 nb_coding_bytes = 2;
         }
         
+#ifdef DISALLOW_64_BITS
+        position += nb_coding_bytes;
+#else
         if(nb_coding_bytes == 1) {
             sample_nb = buffer[position];
             ++position;
@@ -238,6 +245,8 @@ static int read_frame_header(data_input_t* data_input, stream_info_t* stream_inf
                 --nb_coding_bytes;
             }
         }
+#endif
+
     } else {
         uint32_t frame_nb = 0;
         uint8_t nb_coding_bytes = 1;
@@ -411,14 +420,15 @@ static int read_subframe_header(data_input_t* data_input, subframe_info_t* subfr
  *                            -1, yes else no.
  * @return Return the decoded residual.
  */
-static int64_t get_next_rice_residual(data_input_t* data_input, uint8_t partition_order, uint8_t *is_first_partition, uint8_t rice_parameter_size, uint16_t block_size, uint8_t predictor_order, int* error_code) {
+
+static DECODE_TYPE get_next_rice_residual(data_input_t* data_input, uint8_t partition_order, uint8_t *is_first_partition, uint8_t rice_parameter_size, uint16_t block_size, uint8_t predictor_order, int* error_code) {
 
     static uint16_t remaining_nb_samples = 0;
     static uint8_t rice_parameter = 0;
     static uint8_t has_escape_code = 0;
     static uint8_t escape_bits_per_sample = 0;
     static uint16_t nb_partitions[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768};
-    int64_t value = 0;
+    DECODE_TYPE value = 0;
 
     if(remaining_nb_samples == 0) {
         rice_parameter = get_shifted_bits(data_input, rice_parameter_size, error_code);
@@ -446,7 +456,7 @@ static int64_t get_next_rice_residual(data_input_t* data_input, uint8_t partitio
         if(*error_code == -1)
             return 0;
     } else {
-        uint64_t msb = 0;
+        DECODE_UTYPE msb = 0;
 
         while(get_shifted_bits(data_input, 1, error_code) != 1) {
             if(*error_code == -1)
@@ -462,7 +472,7 @@ static int64_t get_next_rice_residual(data_input_t* data_input, uint8_t partitio
             else
                 value = msb >> 1;
         } else {
-            uint32_t lsb = 0;
+            DECODE_UTYPE lsb = 0;
 
             lsb = get_shifted_bits(data_input, rice_parameter, error_code);
             if(*error_code == -1)
@@ -495,7 +505,7 @@ static int64_t get_next_rice_residual(data_input_t* data_input, uint8_t partitio
 static int decode_constant(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, subframe_info_t* subframe_info, uint8_t bits_per_sample, uint8_t channel_nb) {
 
     uint16_t crt_sample = 0;
-    uint64_t value = 0;
+    DECODE_UTYPE value = 0;
     int error_code = 0;
 
     value = get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code);
@@ -529,7 +539,7 @@ static int decode_verbatim(data_input_t* data_input, data_output_t* data_output,
     int error_code = 0;
 
     for(;crt_sample < frame_info->block_size; ++crt_sample) {
-        uint64_t value = get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code);
+        DECODE_UTYPE value = get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code);
         if(error_code == -1)
             return -1;
 
@@ -589,14 +599,14 @@ static int decode_fixed(data_input_t* data_input, data_output_t* data_output, fr
             return -1;
 
         for(; crt_sample < frame_info->block_size; ++crt_sample) {
-            int64_t value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+            DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
 
             if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
                 return -1;
         }
     } else if(order == 1) {
         uint16_t crt_sample = 1;
-        int64_t previous_sample = convert_to_signed(get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code), bits_per_sample - subframe_info->wasted_bits_per_sample);
+        DECODE_TYPE previous_sample = convert_to_signed(get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code), bits_per_sample - subframe_info->wasted_bits_per_sample);
         if(error_code == -1)
             return -1;
 
@@ -625,7 +635,7 @@ static int decode_fixed(data_input_t* data_input, data_output_t* data_output, fr
             return -1;
 
         for(;crt_sample < frame_info->block_size; ++crt_sample) {
-            int64_t value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+            DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
 
             value = previous_sample + value;
 
@@ -637,7 +647,7 @@ static int decode_fixed(data_input_t* data_input, data_output_t* data_output, fr
     } else {
         uint8_t i = 0;
         uint16_t crt_sample = order;
-        typedef struct warm_up_t {int64_t value; struct warm_up_t* next;} warm_up_t;
+        typedef struct warm_up_t {DECODE_TYPE value; struct warm_up_t* next;} warm_up_t;
         warm_up_t warm_ups[4];
         warm_up_t* next_out = warm_ups;
 
@@ -677,7 +687,7 @@ static int decode_fixed(data_input_t* data_input, data_output_t* data_output, fr
         switch(order) {
             case 2:
                 for(;crt_sample < frame_info->block_size; ++crt_sample) {
-                    int64_t value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+                    DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
 
                     value = (next_out->next->value * 2) - next_out->value + value;
                     if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
@@ -690,7 +700,7 @@ static int decode_fixed(data_input_t* data_input, data_output_t* data_output, fr
 
             case 3:
                 for(;crt_sample < frame_info->block_size; ++crt_sample) {
-                    int64_t value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+                    DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
 
                     value = (next_out->next->next->value * 3) - (next_out->next->value * 3) + next_out->value + value;
                     if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
@@ -703,7 +713,7 @@ static int decode_fixed(data_input_t* data_input, data_output_t* data_output, fr
 
             case 4:
                 for(;crt_sample < frame_info->block_size; ++crt_sample) {
-                    int64_t value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+                    DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
 
                     value = (next_out->next->next->next->value * 4) - (next_out->next->next->value * 6) + (next_out->next->value * 4) - next_out->value + value;
                     if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
@@ -750,8 +760,8 @@ static int decode_lpc(data_input_t* data_input, data_output_t* data_output, fram
     uint8_t is_first_partition = 1;     /* for rice coding */
     uint8_t rice_parameter_size = 0;    /* for rice coding */
     uint32_t dividers[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536};
-    int64_t previous_sample = 0;
-    typedef struct warm_up_t {int64_t value; struct warm_up_t* next;} warm_up_t;
+    DECODE_TYPE previous_sample = 0;
+    typedef struct warm_up_t {DECODE_TYPE value; struct warm_up_t* next;} warm_up_t;
     warm_up_t warm_ups[32];
     warm_up_t* next_out = warm_ups;
 
@@ -812,7 +822,7 @@ static int decode_lpc(data_input_t* data_input, data_output_t* data_output, fram
 
     if(order == 1) {
         for(; crt_sample < frame_info->block_size; ++crt_sample) {
-            int64_t value = coeffs[0] * previous_sample;
+            DECODE_TYPE value = coeffs[0] * previous_sample;
 
             if(lpc_shift < 0)
                 value = value << (uint8_t)(-lpc_shift);
@@ -832,7 +842,7 @@ static int decode_lpc(data_input_t* data_input, data_output_t* data_output, fram
         }
     } else {
         for(; crt_sample < frame_info->block_size; ++crt_sample) {
-            int64_t value = 0;
+            DECODE_TYPE value = 0;
             warm_up_t* crt = next_out;
             for(i = 0; i < order; ++i) {
                 value += coeffs[order - i - 1] * crt->value;
@@ -1043,6 +1053,8 @@ int decode_flac_metadata(data_input_t* data_input, stream_info_t* stream_info) {
 int decode_flac_data(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info) {
 
     int error_code = 0;
+
+    
 
     while((error_code = decode_frame(data_input, data_output, stream_info)) > 0)
     if(error_code == -1)

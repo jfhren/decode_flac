@@ -9,6 +9,26 @@
 #define DECODE_FLAC_H
 #include <stdint.h>
 
+
+/* If 64 bits integers are disallowed then 32 bits flac decoding is not
+ * available. */
+#ifdef DISALLOW_64_BITS
+    #undef DECODE_32_BITS
+#endif
+
+/* We define the types for decoded data. */
+#ifdef DECODE_32_BITS
+    #define DECODE_UTYPE uint64_t
+    #define DECODE_TYPE int64_t
+#elif defined DECODE_16_BITS || defined DECODE_20_BITS || defined DECODE_24_BITS
+    #define DECODE_UTYPE uint32_t
+    #define DECODE_TYPE int32_t
+#else
+    #define DECODE_UTYPE uint16_t
+    #define DECODE_TYPE int16_t
+#endif
+
+
 #include "input.h"
 #include "output.h"
 
@@ -55,8 +75,10 @@ typedef struct {
     uint8_t nb_channels;
     /* The number of bits used to represent a sample. */
     uint8_t bits_per_sample;
+#ifndef DISALLOW_64_BITS
     /* The number of encoded samples. 0 if unknow. */
     uint64_t nb_samples;
+#endif
     /* The md5 of the original pcm */
     uint8_t md5[16];
 } stream_info_t;

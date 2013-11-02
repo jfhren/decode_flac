@@ -63,6 +63,10 @@ int refill_input_buffer(data_input_t* data_input);
  * @param error_code     If any error occurs, it will be equal to -1.
  * @return Return the requested bits.
  */
+#ifdef DISALLOW_64_BITS
+uint32_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int* error_code);
+#else
 uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int* error_code);
+#endif
 
 #endif

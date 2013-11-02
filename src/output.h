@@ -5,10 +5,11 @@
  * as published by Sam Hocevar. See the COPYING file for more details.
  */
 
+#include <stdint.h>
+#include "decode_flac.h"
+
 #ifndef OUTPUT_H
 #define OUTPUT_H
-#include <stdint.h>
-
 typedef struct {
     /* Where to write when dumping. */
     int fd;
@@ -36,12 +37,13 @@ typedef struct {
 /**
  * We suppose that if value represent a signed integer then it is using two's
  * complement representation.  For now, we just fill the whole most significant
- * (64 - size) bis with 1 if the size-th bit is one.
+ * (64, 32 or 16 - size) bis with 1 if the size-th bit is one.
  * @param value The value to convert.
  * @param size The number of bits making up the value.
- * @return Return the converted value as a signed one on 64 bits.
+ * @return Return the converted value as a signed one on 64 bits, 32 bits or 16
+ * bits depending on compile time flags.
  */
-int64_t convert_to_signed(uint64_t value, uint8_t size);
+DECODE_TYPE convert_to_signed(DECODE_UTYPE, uint8_t size);
 
 /**
  * Dump nb_bytes bytes from the output buffer to the output file descriptor
@@ -66,6 +68,6 @@ int dump_buffer(data_output_t* data_output, int nb_bytes);
  *                            assignement.
  * @return Return 0 if successful, -1 else.
  */
-int put_shifted_bits(data_output_t* data_output, uint64_t sample, uint8_t sample_size, uint8_t channel_assignement, uint8_t channel_nb);
+int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sample_size, uint8_t channel_assignement, uint8_t channel_nb);
 
 #endif

@@ -109,9 +109,16 @@ int refill_input_buffer(data_input_t* data_input) {
  * @param error_code     If any error occurs, it will be equal to -1.
  * @return Return the requested bits.
  */
+#ifdef DISALLOW_64_BITS
+uint32_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int* error_code) {
+
+    uint64_t value = 0;
+#else
 uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int* error_code) {
 
     uint64_t value = 0;
+#endif
+
     uint8_t nb_needed_bits = (requested_size + data_input->shift);
     uint8_t nb_needed_bytes = nb_needed_bits / 8;
     uint8_t* buffer = NULL;
@@ -160,6 +167,7 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
                 data_input->position += 4;
                 return value;
 
+#ifndef DISALLOW_64_BITS
             case 40:
                 value = ((int64_t)buffer[position] << 32) | (buffer[position + 1] << 24) | (buffer[position + 2] << 16) | (buffer[position + 3] << 8) | buffer[position + 4];
                 data_input->position += 5;
@@ -179,6 +187,7 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
                 value = ((int64_t)buffer[position] << 56) | ((int64_t)buffer[position + 1] << 48) | ((int64_t)buffer[position + 2] << 40) | ((int64_t)buffer[position + 3] << 32) | (buffer[position + 4] << 24) | (buffer[position + 5] << 16) | (buffer[position + 6] << 8) | buffer[position + 7];
                 data_input->position += 8;
                 return value;
+#endif
         }
     }
 
@@ -197,7 +206,9 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
         value = ((buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] >> (32 - nb_needed_bits));
         data_input->position += 3;
         data_input->shift = nb_needed_bits - 24;
-    } else if(nb_needed_bits < 40) {
+    }
+#ifndef DISALLOW_64_BITS
+     else if(nb_needed_bits < 40) {
         value = ((int64_t)(buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] >> (40 - nb_needed_bits));
         data_input->position += 4;
         data_input->shift = nb_needed_bits - 32;
@@ -218,6 +229,7 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
         data_input->position += 8;
         data_input->shift = nb_needed_bits - 64;
     }
+#endif
 
     return value;
 
