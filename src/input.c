@@ -14,6 +14,19 @@
 #include "input.h"
 
 
+int get_position(data_input_t* data_input) {
+    return 0;
+}
+
+int skip_to_position(data_input_t* data_input, int position) {
+    return 0;
+}
+
+int skip_nb_bytes(data_input_t* data_input, int nb_bytes_to_skip) {
+    return 0;
+}
+
+
 /**
  * Test to see if the input should be reflled before having access to the
  * desired number of bytes.

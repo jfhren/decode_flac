@@ -83,23 +83,60 @@ typedef struct {
     uint8_t md5[16];
 } stream_info_t;
 
+struct previous_value_t {
+    DECODE_TYPE value;
+    struct previous_value_t* next;
+};
+
+struct rice_coding_info_t {
+    uint8_t rice_parameter_size;
+    uint8_t rice_parameter;
+    uint8_t partition_order; 
+    uint8_t is_first_partition;
+    uint8_t has_escape_code;
+    uint8_t escape_bits_per_sample;
+    uint16_t remaining_nb_samples;
+}
+
+typedef struct {
+    /* Tell how the sample are encoded within the subframe. */
+    uint8_t type;
+    /* How many bits are wasted per sample. */
+    uint8_t wasted_bits_per_sample;
+    /* How many bits are used per sample while taking into account stereo
+       encoding. */
+    uint8_t bits_per_sample;
+
+    int data_input_position;
+    DECODE_UTYPE value;
+
+    struct previous_value_t previous_values[32];
+    struct previous_value_t* next_out;
+
+    uint8_t lpc_precision = 0;
+    int8_t lpc_shift = 0;
+    int16_t coeffs[32];
+
+    struct rice_coding_info_t residual_info;
+
+    uint8_t has_parameters;
+} subframe_info_t;
+
 typedef struct {
     /* The number of samples in the block encoded by this frame. */
     uint16_t block_size;
     /* How many channel there is and how channels are encoded. */
     uint8_t channel_assignement;
+    uint8_t nb_channels;
     /* The number of bits used to represent a sample. Should be the same than
        in the stream info. */
     uint8_t bits_per_sample;
+    #ifdef STEREO_ONLY
+    subframe_info_t subframes_info[2];
+    #else
+    subframe_info_t subframes_info[8];
+    #endif
 } frame_info_t;
-
-typedef struct {
-    /* Tell how the sample are encoded within the subframe. */
-    uint8_t type;
-    /* How many bits are waster per sample (not sure it is correctly
-       implemented for now but it is rare so whatever for now.) */
-    uint8_t wasted_bits_per_sample;
-} subframe_info_t;
 
 
 /**

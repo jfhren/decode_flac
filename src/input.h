@@ -25,6 +25,12 @@ typedef struct {
 } data_input_t;
 
 
+int get_position(data_input_t* data_input);
+
+int skip_to_position(data_input_t* data_input, int position);
+
+int skip_nb_bytes(data_input_t* data_input, int nb_bytes_to_skip);
+
 /**
  * Test to see if the input should be reflled before having access to the
  * desired number of bytes.

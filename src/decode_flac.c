@@ -502,21 +502,37 @@ static DECODE_TYPE get_next_rice_residual(data_input_t* data_input, uint8_t part
  *                        are currently outputing.
  * @return Return 0 if successful, -1 else. 
  */
-static int decode_constant(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, subframe_info_t* subframe_info, uint8_t bits_per_sample, uint8_t channel_nb) {
+static uint16_t decode_constant(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
-    uint16_t crt_sample = 0;
-    DECODE_UTYPE value = 0;
-    int error_code = 0;
+    if(!frame_info->subframes_info[channel_nb].has_parameters) {
+        frame_info->subframes_info[channel_nb].value = get_shifted_bits(data_input, frame_info->subframes_info[channel_nb].bits_per_sample - frame_info->subframes_info[channel_nb].wasted_bits_per_sample, error_code) << frame_info->subframes_info[channel_nb].wasted_bits_per_sample;
+        if(*error_code == -1)
+            return 0;
 
-    value = get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code);
-    if(error_code == -1)
-        return -1;
+        frame_info->subframes_info[channel_nb].has_parameters = 1;
+    }
 
-    for(;crt_sample < frame_info->block_size; ++crt_sample)
-       if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-            return -1;
+    for(;crt_sample < frame_info->block_size; ++crt_sample) {
+       *error_code = put_shifted_bits(data_output, frame_info->subframes_info[channel_nb].value, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+        if(*error_code == -1)
+            return 0;
+        if(*error_code == 0) {
+            if((channel_nb + 1) < frame_info->nb_channels) {
+                if(frame_info->subframes_info[channel_nb + 1].input_data_position == -1) {
+                    frame_info->subframes_info[channel_nb].input_data_position = get_position(data_input);
+                    frame_info->subframe_info[channel_nb + 1].input_data_position = frame_info->subframes_info[channel_nb].data_input_position;
+                } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                    if(skip_to_position(data_input, frame_info->subframes_info[channel_nb + 1].data_input_position) == -1) {
+                        *error_code = -1;
+                        return 0;
+                    }
+                }
+            }
+            return crt_sample;
+        }
+    }
 
-    return 0;
+    return crt_sample;
 
 }
 
@@ -533,21 +549,45 @@ static int decode_constant(data_input_t* data_input, data_output_t* data_output,
  *                        are currently outputing.
  * @return Return 0 if successful, -1 else.
  */
-static int decode_verbatim(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, subframe_info_t* subframe_info, uint8_t bits_per_sample, uint8_t channel_nb) {
+static uint16_t decode_verbatim(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
-    uint16_t crt_sample = 0;
-    int error_code = 0;
-
-    for(;crt_sample < frame_info->block_size; ++crt_sample) {
-        DECODE_UTYPE value = get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code);
-        if(error_code == -1)
-            return -1;
-
-        if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-            return -1;
+    if(crt_sample != 0) {
+        *error_code = put_shifted_bits(data_output, frame_info->subframes_info[channel_nb].value, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+        if(*error_code == -1)
+            return 0;
+        ++crt_sample;
     }
 
-    return 0;
+    for(;crt_sample < frame_info->block_size; ++crt_sample) {
+        DECODE_UTYPE value = get_shifted_bits(data_input, frame_info->subframes_info[channel_nb].bits_per_sample - frame_info->subframes_info[channel_nb].wasted_bits_per_sample, error_code) << frame_info->subframes_info[channel_nb].wasted_bits_per_sample;
+        if(*error_code == -1)
+            return -1;
+
+        *error_code = put_shifted_bits(data_output, value, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+        if(*error_code == -1)
+            return 0;
+        if(*error_code == 0) {
+            frame_info->subframes_info[channel_nb].value = value;
+            frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
+            if((channel_nb + 1) < frame_info->nb_channels) {
+                if(frame_info->subframe_info[channel_nb + 1].data_input_position == -1) {
+                    if(skip_nb_bytes(data_input, (bits_per_sample - frame_info->subframes_info[channel_nb].wasted_bits_per_sample) * (frame_info->block_size - (crt_sample + 1))) == -1) {
+                        *error_code = -1;
+                        return 0;
+                    }
+                    frame_info->subframes_info[channel_nb + 1].data_input_position = get_position(data_input);
+                } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                    if(skip_to_position(data_input, frame_info->subframe_info[channel_nb + 1].data_input_position) == -1) {
+                        *error_code = -1;
+                        return 0;
+                    }
+                }
+            }
+            return crt_sample;
+        }
+    }
+
+    return crt_sample;
 
 }
 
@@ -566,166 +606,317 @@ static int decode_verbatim(data_input_t* data_input, data_output_t* data_output,
  *                        are currently outputing.
  * @return Return 0 if successful, -1 else.
  */
-static int decode_fixed(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, subframe_info_t* subframe_info, uint8_t bits_per_sample, uint8_t channel_nb) {
+static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
-    int error_code = 0;
     uint8_t order = subframe_info->type - 8;
-    uint8_t residual_coding_method = 0;
-    uint8_t partition_order = 0;        /* for rice coding */ 
-    uint8_t is_first_partition = 1;     /* for rice coding */
-    uint8_t rice_parameter_size = 0;    /* for rice coding */
+    struct rice_coding_info_t residual_info = {0};
+    uint8_t should_skip_output = 0;
+    uint16_t saved_crt_sample = 0;
 
     if(order == 0) {
-        uint16_t crt_sample = 0;
-        residual_coding_method = get_shifted_bits(data_input, 2, &error_code);
-        if(error_code == -1)
-            return -1;
-        switch(residual_coding_method) {
-            case 0:
-                rice_parameter_size = 4;
-                break;
+        if(!frame_info->subframes_info[channel_nb].has_parameters) {
+            uint8_t residual_coding_method = get_shifted_bits(data_input, 2, error_code);
+            if(*error_code == -1)
+                return 0;
 
-            case 1:
-                rice_parameter_size = 5;
-                break;
+            switch(residual_coding_method) {
+                case 0:
+                    frame_info->subframes_info[channel_nb].residual_info.rice_parameter_size = 4;
+                    break;
 
-            default:
-                return -1;
+                case 1:
+                    frame_info->subframes_info[channel_nb].residual_info.rice_parameter_size = 5;
+                    break;
+
+                default:
+                    *error_code = -1;
+                    return 0;
+            }
+
+            residual_info.is_first_partition = 1;
+            residual_info.partition_order = get_shifted_bits(data_input, 4, error_code);
+            if(*error_code == -1)
+                return 0;
+
+            frame_info->subframes_info[channel_nb].has_parameters = 1;
         }
 
-        is_first_partition = 1;
-        partition_order = get_shifted_bits(data_input, 4, &error_code);
-        if(error_code == -1)
-            return -1;
+        if(crt_sample != 0) {
+            *error_code = put_shifted_bits(data_output, frame_info->subframes_info[channel_nb].value, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+            if(*error_code == -1)
+                return 0;
+            ++crt_sample;
+        }
 
         for(; crt_sample < frame_info->block_size; ++crt_sample) {
-            DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+            DECODE_TYPE value = get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code) << subframe_info->wasted_bits_per_sample;
+            if(*error_code == -1)
+                return 0;
 
-            if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                return -1;
+            if(!should_skip_output) {
+                *error_code = put_shifted_bits(data_output, value, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+                if(*error_code == -1)
+                    return 0;
+                if(*error_code == 0) {
+                    frame_info->subframes_info[channel_nb].value = value;
+                    frame_info->subframes_info[channel_nb].residual_info = residual_info;
+                    frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
+                    if((channel_nb + 1) < frame_info->nb_channels) {
+                        if(frame_info->subframes_info[channel_nb + 1].data_input_position == -1) {
+                            should_skip_output = 1;
+                            saved_crt_sample = crt_sample;
+                        } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                            if(skip_to_position(data_input, frame_info->subframes_info[channel_nb + 1].data_input) == -1) {
+                                *error_code = -1;
+                                return 0;
+                            }
+                            return crt_sample;
+                        }
+                    } else {
+                        return crt_sample;
+                    }
+                }
+            }
+        }
+
+        if(should_skip_output) {
+            frame_info->subframes_info[channel_nb + 1].data_input_position = get_position(data_input);
+            return saved_crt_sample;
         }
     } else if(order == 1) {
-        uint16_t crt_sample = 1;
-        DECODE_TYPE previous_sample = convert_to_signed(get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code), bits_per_sample - subframe_info->wasted_bits_per_sample);
-        if(error_code == -1)
-            return -1;
+        DECODE_TYPE previous_sample = 0;
 
-        if(put_shifted_bits(data_output, previous_sample << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-            return -1;
+        if(!frame_info->subframes_info[channel_nb].has_parameters) {
+            unint8_t residual_coding_method = 0;
 
-        residual_coding_method = get_shifted_bits(data_input, 2, &error_code);
-        if(error_code == -1)
-            return -1;
-        switch(residual_coding_method) {
-            case 0:
-                rice_parameter_size = 4;
-                break;
+            previous_sample = convert_to_signed(get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, error_code), bits_per_sample - subframe_info->wasted_bits_per_sample);
+            if(*error_code == -1)
+                return 0;
 
-            case 1:
-                rice_parameter_size = 5;
-                break;
+            residual_coding_method = get_shifted_bits(data_input, 2, error_code);
+            if(*error_code == -1)
+                return 0;
+            switch(residual_coding_method) {
+                case 0:
+                    residual_info.rice_parameter_size = 4;
+                    break;
 
-            default:
-                return -1;
+                case 1:
+                    residual_info.rice_parameter_size = 5;
+                    break;
+
+                default:
+                    *error_code = -1;
+                    return 0;
+            }
+
+            residual_info.is_first_partition = 1;
+            residual_info.partition_order = get_shifted_bits(data_input, 4, error_code);
+            if(*error_code == -1)
+                return 0;
+
+            frame_info->subframe_info[channel_nb].has_parameters = 1;
+        } else {
+            previous_sample = frame_info->subframes_info[channel_nb].previous_values[0].value;
         }
 
-        is_first_partition = 1;
-        partition_order = get_shifted_bits(data_input, 4, &error_code);
-        if(error_code == -1)
-            return -1;
+        *error_code = put_shifted_bits(data_output, previous_sample << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+        if(*error_code == -1)
+            return 0;
+        if(*error_code == 0) {
+            frame_info->subframes_info[channel_nb].previous_values[0].value = previous_sample;
+            frame_info->subframes_info[channel_nb].residual_info = residual_info;
+            frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
+
+            if((channel_nb + 1) < frame_info->nb_channels) {
+                if(frame_info->subframes[channel_nb + 1].data_input_position == -1) {
+                    should_skip_output = 1;
+                    saved_crt_sample = crt_sample;
+                } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                    if(skip_to_position(data_input, frame->subframes_info[channel_nb].data_input_position) == -1) {
+                        *error_code = -1;
+                        return 0;
+                    }
+                    return crt_sample;
+                }
+            } else {
+                return crt_sample;
+            }
+        }
+
+        ++crt_sample;
 
         for(;crt_sample < frame_info->block_size; ++crt_sample) {
-            DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+            DECODE_TYPE value = get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
+            if(*error_code == -1)
+                return 0;
 
-            value = previous_sample + value;
+            if(!should_skip_output) {
+                value = previous_sample + value;
 
-            if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                return -1;
+                *error_code = put_shifted_bits(data_output, value << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+                if(*error_code == -1)
+                    return 0;
+                if(*error_code == 0) {
+                    frame_info->subframes_info[channel_nb].previous_values[0].value = value;
+                    frame_info->subframes_info[channel_nb].residual_info = residual_info;
+                    frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
 
-            previous_sample = value;
+                    if((channel_nb + 1) < frame_info->nb_channels) {
+                        if(frame_info->subframes[channel_nb + 1].data_input_position == -1) {
+                            should_skip_output = 1;
+                            saved_crt_sample = crt_sample;
+                        } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                            if(skip_to_position(data_input, frame->subframes_info[channel_nb].data_input_position) == -1) {
+                                *error_code = -1;
+                                return 0;
+                            }
+                            return crt_sample;
+                        }
+                    } else {
+                        return crt_sample;
+                    }
+                }
+
+                previous_sample = value;
+            }
+        }
+
+        if(should_skip_output) {
+            frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
+            return saved_crt_sample;
         }
     } else {
-        uint8_t i = 0;
-        uint16_t crt_sample = order;
-        typedef struct warm_up_t {DECODE_TYPE value; struct warm_up_t* next;} warm_up_t;
-        warm_up_t warm_ups[4];
-        warm_up_t* next_out = warm_ups;
+        if(!frame_info->subframes_info[channel_nb].has_parameters) {
+            uint8_t i = 0;
+            uint8_t residual_coding_method = 0;
 
-        for(; i < order; ++i) {
-            warm_ups[i].value = convert_to_signed(get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code), bits_per_sample - subframe_info->wasted_bits_per_sample);
-            if(error_code == -1)
-                return -1;
+            for(; i < order; ++i) {
+                frame_info->subframes_info[channel_nb].previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, frame_info->subframes_info[channel_nb].bits_per_sample - frame_info->subframes_info[channel_nb].wasted_bits_per_sample, error_code), frame_info->subframes_info[channel_nb].bits_per_sample - frame_info->subframes_info[channel_nb].wasted_bits_per_sample);
+                if(*error_code == -1)
+                    return -1;
 
-            if(put_shifted_bits(data_output, warm_ups[i].value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                return -1;
+                frame_info->subframes_info[channel_nb].previous_values[i].next = frame_info->subframes_info[channel_nb].previous_values + i + 1;
+            }
+            frame_info->subframes_info[channel_nb].previous_values[order - 1].next = frame_info->subframes_info[channel_nb].previous_values;
 
-            warm_ups[i].next = warm_ups + i + 1;
+            residual_coding_method = get_shifted_bits(data_input, 2, error_code);
+            if(*error_code == -1)
+                return 0;
+            switch(residual_coding_method) {
+                case 0:
+                    frame_info->subframes_info[channel_nb].residual_info.rice_parameter_size = 4;
+                    break;
+
+                case 1:
+                    frame_info->subframes_info[channel_nb].residual_info.rice_parameter_size = 5;
+                    break;
+
+                default:
+                    *error_code = -1;
+                    return 0;
+            }
+
+            frame_info->subframes_info[channel_nb].residual_info.is_first_partition = 1;
+            frame_info->subframes_info[channel_nb].residual_info.partition_order = get_shifted_bits(data_input, 4, error_code);
+            if(*error_code == -1)
+                return 0;
+
+            frame_info->subframes_info[channel_nb].has_parameters = 1;
         }
-        warm_ups[order - 1].next = warm_ups;
 
-        residual_coding_method = get_shifted_bits(data_input, 2, &error_code);
-        if(error_code == -1)
-            return -1;
-        switch(residual_coding_method) {
-            case 0:
-                rice_parameter_size = 4;
-                break;
+        if(crt_sample < order) {
+            for(; crt_sample < order; ++crt_sample) {
+                if(!should_skip_output) {
+                    *error_code = put_shifted_bits(data_output, frame_info->subframes_info[channel_nb].previous_values[crt_sample].value << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+                    if(*error_code == -1)
+                        return 0;
+                    if(*error_code == 0) {
+                        frame_info->subframes_info[channel_nb].residual_info = residual_info;
+                        frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
 
-            case 1:
-                rice_parameter_size = 5;
-                break;
+                        if((channel_nb + 1) < frame_info->nb_channels) {
+                            if(frame_info->subframes[channel_nb + 1].data_input_position == -1) {
+                                should_skip_output = 1;
+                                saved_crt_sample = crt_sample;
+                            } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                                if(skip_to_position(data_input, frame->subframes_info[channel_nb].data_input_position) == -1) {
+                                    *error_code = -1;
+                                    return 0;
+                                }
+                                return crt_sample;
+                            }
+                        } else {
+                            return crt_sample;
+                        }
+                    }
+                }
+            }
+        } else {
+            *error_code = put_shifted_bits(data_output, frame_info->subframes_info[channel_nb].next_out->value << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+            if(*error_code == -1)
+                return 0;
 
-            default:
-                return -1;
+            ++crt_sample;
+            frame_info->subframes_info[channel_nb].next_out = frame_info->subframes_info[channel_nb].next_out->next;
         }
 
-        is_first_partition = 1;
-        partition_order = get_shifted_bits(data_input, 4, &error_code);
-        if(error_code == -1)
-            return -1;
+        for(;crt_sample < frame_info->block_size; ++crt_sample) {
+            DECODE_TYPE value = get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
+            if(*error_code == -1)
+                return 0;
 
-        switch(order) {
-            case 2:
-                for(;crt_sample < frame_info->block_size; ++crt_sample) {
-                    DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+            if(!should_skip_output) {
+                switch(order) {
+                    case 2:
+                        value = (frame_info->subframes_info[channel_nb].next_out->next->value * 2) - frame_info->subframes_info[channel_nb].next_out->value + value;
+                        break;
 
-                    value = (next_out->next->value * 2) - next_out->value + value;
-                    if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                        return -1;
+                    case 3:
+                        value = (frame_info->subframes_info[channel_nb].next_out->next->next->value * 3) - (frame_info->subframes_info[channel_nb].next_out->next->value * 3) + frame_info->subframes_info[channel_nb].next_out->value + value;
+                        break;
 
-                    next_out->value = value;
-                    next_out = next_out->next;
+                    case 4:
+                        value = (frame_info->subframes_info[channel_nb].next_out->next->next->next->value * 4) - (frame_info->subframes_info[channel_nb].next_out->next->next->value * 6) + (frame_info->subframes_info[channel_nb].next_out->next->value * 4) - frame_info->subframes_info[channel_nb].next_out->value + value;
                 }
-                break;
 
-            case 3:
-                for(;crt_sample < frame_info->block_size; ++crt_sample) {
-                    DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+                *error_code = put_shifted_bits(data_output, value << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+                if(*error_code == -1)
+                    return 0;
 
-                    value = (next_out->next->next->value * 3) - (next_out->next->value * 3) + next_out->value + value;
-                    if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                        return -1;
+                frame_info->subframes_info[channel_nb].next_out->value = value;
 
-                    next_out->value = value;
-                    next_out = next_out->next;
+                if(*error_code == 0) {
+                    frame_info->subframes_info[channel_nb].residual_info = residual_info;
+                    frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
+
+                    if((channel_nb + 1) < frame_info->nb_channels) {
+                        if(frame_info->subframes[channel_nb + 1].data_input_position == -1) {
+                            should_skip_output = 1;
+                            saved_crt_sample = crt_sample;
+                        } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                            if(skip_to_position(data_input, frame->subframes_info[channel_nb].data_input_position) == -1) {
+                                *error_code = -1;
+                                return 0;
+                            }
+                            return crt_sample;
+                        }
+                    } else {
+                        return crt_sample;
+                    }
+                } else {
+                    frame_info->subframes_info[channel_nb].next_out = frame_info->subframes_info[channel_nb].next_out->next;
                 }
-                break;
+            }
+        }
 
-            case 4:
-                for(;crt_sample < frame_info->block_size; ++crt_sample) {
-                    DECODE_TYPE value = get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
-
-                    value = (next_out->next->next->next->value * 4) - (next_out->next->next->value * 6) + (next_out->next->value * 4) - next_out->value + value;
-                    if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                        return -1;
-
-                    next_out->value = value;
-                    next_out = next_out->next;
-                }
+        if(should_skip_output) {
+            frame_info->subframes_info[channel_nb + 1].data_input_position = get_position(data_input);
+            return saved_crt_sample;
         }
     }
 
-    return 0;
+    return crt_sample;
 
 }
 
@@ -746,129 +937,212 @@ static int decode_fixed(data_input_t* data_input, data_output_t* data_output, fr
  *                        are currently outputing.
  * @return Return 0 if successful, -1 else.
  */
-static int decode_lpc(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, subframe_info_t* subframe_info, uint8_t bits_per_sample, uint8_t channel_nb) {
+static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
-    int error_code = 0;
     uint8_t order = (subframe_info->type & 0x1F) + 1;
-    uint16_t crt_sample = order;
     uint8_t i = 0;
-    uint8_t lpc_precision = 0;
-    int8_t lpc_shift = 0;
-    int16_t coeffs[32];
-    uint8_t residual_coding_method = 0;
-    uint8_t partition_order = 0;        /* for rice coding */ 
-    uint8_t is_first_partition = 1;     /* for rice coding */
-    uint8_t rice_parameter_size = 0;    /* for rice coding */
-    uint32_t dividers[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536};
-    DECODE_TYPE previous_sample = 0;
-    typedef struct warm_up_t {DECODE_TYPE value; struct warm_up_t* next;} warm_up_t;
-    warm_up_t warm_ups[32];
-    warm_up_t* next_out = warm_ups;
+    static uint32_t dividers[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536};
+    struct rice_coding_info_t residual_info;
+    uint8_t should_skip_output = 0;
+    uint16_t saved_crt_sample = 0;
 
+    if(!frame_info->subframes_info[channel_nb].has_parameters) {
+        uint8_t residual_coding_method = 0;
 
-    if(order == 1) {
-        previous_sample = convert_to_signed(get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code), bits_per_sample - subframe_info->wasted_bits_per_sample);
-        if(error_code == -1)
-            return -1;
-        if(put_shifted_bits(data_output, previous_sample << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-            return -1;
-    } else {
         for(; i < order; ++i) {
-            warm_ups[i].value = convert_to_signed(get_shifted_bits(data_input, bits_per_sample - subframe_info->wasted_bits_per_sample, &error_code), bits_per_sample - subframe_info->wasted_bits_per_sample);
-            if(error_code == -1)
+            frame_info->subframes_info[channel_nb].previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, frame_info->subframes_info[channel_nb].bits_per_sample - frame_info->subframes_info[channel_nb].wasted_bits_per_sample, error_code), frame_info->subframes_info[channel_nb].bits_per_sample - frame_info->subframes_info[channel_nb].wasted_bits_per_sample);
+            if(*error_code == -1)
                 return -1;
 
-            if(put_shifted_bits(data_output, warm_ups[i].value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                return -1;
-            warm_ups[i].next = warm_ups + i + 1;
+            frame_info->subframes_info[channel_nb].previous_values[i].next = frame_info->subframes_info[channel_nb].previous_values + i + 1;
         }
-        warm_ups[order - 1].next = warm_ups;
+        frame_info->subframes_info[channel_nb].previous_values[order - 1].next = frame_info->subframes_info[channel_nb].previous_values;
+
+        frame_info->subframes_info[channel_nb].lpc_precision = get_shifted_bits(data_input, 4, error_code) + 1;
+        if(*error_code == -1)
+            return 0;
+
+        frame_info->subframes_info[channel_nb].lpc_shift = convert_to_signed(get_shifted_bits(data_input, 5, error_code), 5);
+        if(*error_code == -1)
+            return 0;
+
+        for(i = 0; i < order; ++i) {
+            frame_info->subframes_info[channel_nb].coeffs[i] = convert_to_signed(get_shifted_bits(data_input, frame_info->subframes_info[channel_nb].lpc_precision, error_code), frame_info->subframes_info[channel_nb].lpc_precision);
+            if(*error_code == -1)
+                return 0;
+        }
+
+        residual_coding_method = get_shifted_bits(data_input, 2, error_code);
+        if(*error_code == -1)
+            return 0;
+        switch(residual_coding_method) {
+            case 0:
+                residual_info.rice_parameter_size = 4;
+                break;
+
+            case 1:
+                residual_info.rice_parameter_size = 5;
+                break;
+
+            default:
+                *error_code = -1;
+                return 0;
+        }
+
+        residual_info.is_first_partition = 1;
+        residual_info.partition_order = get_shifted_bits(data_input, 4, error_code);
+        if(*error_code == -1)
+            return 0;
+
+        frame_info->subframes_info[channel_nb].has_parameters = 1;
     }
 
-    lpc_precision = get_shifted_bits(data_input, 4, &error_code) + 1;
-    if(error_code == -1)
-        return -1;
+    if(crt_sample < order) {
+        for(; crt_sample < order; ++crt_sample) {
+            if(!should_skip_output) {
+                *error_code = put_shifted_bits(data_output, frame_info->subframes_info[channel_nb].previous_values[crt_sample].value << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+                if(*error_code == -1)
+                    return 0;
+                if(*error_code == 0) {
+                    frame_info->subframes_info[channel_nb].residual_info = residual_info;
+                    frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
 
-    lpc_shift = convert_to_signed(get_shifted_bits(data_input, 5, &error_code), 5);
-    if(error_code == -1)
-        return -1;
+                    if((channel_nb + 1) < frame_info->nb_channels) {
+                        if(frame_info->subframes[channel_nb + 1].data_input_position == -1) {
+                            should_skip_output = 1;
+                            saved_crt_sample = crt_sample;
+                        } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                            if(skip_to_position(data_input, frame->subframes_info[channel_nb].data_input_position) == -1) {
+                                *error_code = -1;
+                                return 0;
+                            }
+                            return crt_sample;
+                        }
+                    } else {
+                        return crt_sample;
+                    }
+                }
+            }
+        }
+    } else {
+        *error_code = put_shifted_bits(data_output, frame_info->subframes_info[channel_nb].next_out->value << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+        if(*error_code == -1)
+            return 0;
 
-    for(i = 0; i < order; ++i) {
-        coeffs[i] = convert_to_signed(get_shifted_bits(data_input, lpc_precision, &error_code), lpc_precision);
-        if(error_code == -1)
-            return -1;
+        ++crt_sample;
+        frame_info->subframes_info[channel_nb].next_out = frame_info->subframes_info[channel_nb].next_out->next;
     }
-
-    residual_coding_method = get_shifted_bits(data_input, 2, &error_code);
-    if(error_code == -1)
-        return -1;
-    switch(residual_coding_method) {
-        case 0:
-            rice_parameter_size = 4;
-            break;
-
-        case 1:
-            rice_parameter_size = 5;
-            break;
-
-        default:
-            return -1;
-    }
-
-    is_first_partition = 1;
-    partition_order = get_shifted_bits(data_input, 4, &error_code);
-    if(error_code == -1)
-        return -1;
 
     if(order == 1) {
         for(; crt_sample < frame_info->block_size; ++crt_sample) {
-            DECODE_TYPE value = coeffs[0] * previous_sample;
+            DECODE_TYPE value = 0;
+            if(!should_skip_output) {
+                value = frame_info->subframes_info[channel_nb].coeffs[0] * frame_info->subframes_info[channel_nb].previous_values[0].value;
 
-            if(lpc_shift < 0)
-                value = value << (uint8_t)(-lpc_shift);
-            else {
-                if(value < 0)
-                    value = -(((-value) + (dividers[lpc_shift] - 1)) >> lpc_shift);
-                else
-                    value = value >> lpc_shift;
+                if(frame_info->subframes_info[channel_nb].lpc_shift < 0)
+                    value = value << (uint8_t)(-frame_info->subframes_info[channel_nb].lpc_shift);
+                else {
+                    if(value < 0)
+                        value = -(((-value) + (dividers[frame_info->subframes_info[channel_nb].lpc_shift] - 1)) >> frame_info->subframes_info[channel_nb].lpc_shift);
+                    else
+                        value = value >> frame_info->subframes_info[channel_nb].lpc_shift;
+                }
             }
 
-            value += get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
+            value += get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
+            if(*error_code == -1)
+                return 0;
 
-            if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                return -1;
+            if(!should_skip_output) {
+                *error_code = put_shifted_bits(data_output, value << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+                if(*error_code == -1)
+                    return -1;
 
-            previous_sample = value;
+                frame_info->subframes_info[channel_nb].previous_values[0].value = value;
+
+                if(*error_code == 0) {
+                    frame_info->subframes_info[channel_nb].residual_info = residual_info;
+                    frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
+
+                    if((channel_nb + 1) < frame_info->nb_channels) {
+                        if(frame_info->subframes[channel_nb + 1].data_input_position == -1) {
+                            should_skip_output = 1;
+                            saved_crt_sample = crt_sample;
+                        } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                            if(skip_to_position(data_input, frame->subframes_info[channel_nb].data_input_position) == -1) {
+                                *error_code = -1;
+                                return 0;
+                            }
+                            return crt_sample;
+                        }
+                    } else {
+                        return crt_sample;
+                    }
+                }
+            }
         }
     } else {
         for(; crt_sample < frame_info->block_size; ++crt_sample) {
             DECODE_TYPE value = 0;
-            warm_up_t* crt = next_out;
-            for(i = 0; i < order; ++i) {
-                value += coeffs[order - i - 1] * crt->value;
-                crt = crt->next;
+            if(!should_skip_output) {
+                previous_value_t* crt = frame_info->subframes_info[channel_nb].next_out;
+                for(i = 0; i < order; ++i) {
+                    value += frame_info->subframes_info[channel_nb].coeffs[order - i - 1] * crt->value;
+                        crt = crt->next;
+                }
+
+                if(frame_info->subframes_info[channel_nb].lpc_shift < 0)
+                    value = value << (uint8_t)(-frame_info->subframes_info[channel_nb].lpc_shift);
+                else {
+                    if(value < 0)
+                        value = -(((-value) + (dividers[frame_info->subframes_info[channel_nb].lpc_shift] - 1)) >> frame_info->subframes_info[channel_nb].lpc_shift);
+                    else
+                        value = value >> frame_info->subframes_info[channel_nb].lpc_shift;
+                }
             }
 
-            if(lpc_shift < 0)
-                value = value << (uint8_t)(-lpc_shift);
-            else {
-                if(value < 0)
-                    value = -(((-value) + (dividers[lpc_shift] - 1)) >> lpc_shift);
-                else
-                    value = value >> lpc_shift;
+            value += get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
+            if(*error_code == -1)
+                return 0;
+
+            if(!should_skip_output) {
+                *error_code = put_shifted_bits(data_output, value << frame_info->subframes_info[channel_nb].wasted_bits_per_sample, frame_info->subframes_info[channel_nb].bits_per_sample, frame_info->channel_assignement, channel_nb);
+                if(*error_code == -1)
+                    return 0;
+
+                frame_info->subframes_info[channel_nb].next_out->value = value;
+
+                if(*error_code == 0) {
+                    frame_info->subframes_info[channel_nb].residual_info = residual_info;
+                    frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
+
+                    if((channel_nb + 1) < frame_info->nb_channels) {
+                        if(frame_info->subframes[channel_nb + 1].data_input_position == -1) {
+                            should_skip_output = 1;
+                            saved_crt_sample = crt_sample;
+                        } else if(frame_info->subframes_info[channel_nb + 1].type != SUBFRAME_CONSTANT) {
+                            if(skip_to_position(data_input, frame->subframes_info[channel_nb].data_input_position) == -1) {
+                                *error_code = -1;
+                                return 0;
+                            }
+                            return crt_sample;
+                        }
+                    } else {
+                        return crt_sample;
+                    }
+                } else {
+                    frame_info->subframes_info[channel_nb].next_out = frame_info->subframes_info[channel_nb].next_out->next;
+                }
             }
-
-            value += get_next_rice_residual(data_input, partition_order, &is_first_partition, rice_parameter_size, frame_info->block_size, order, &error_code);
-
-            if(put_shifted_bits(data_output, value << subframe_info->wasted_bits_per_sample, bits_per_sample, frame_info->channel_assignement, channel_nb) == -1)
-                return -1;
-
-            next_out->value = value;
-            next_out = next_out->next;
         }
     }
 
-    return 0;
+    if(should_skip_output) {
+        frame_info->subframes_info[channel_nb + 1].data_input_position = get_position(data_input);
+        return saved_crt_sample;
+    }
+
+    return crt_sample;
 
 }
 
@@ -886,29 +1160,20 @@ static int decode_lpc(data_input_t* data_input, data_output_t* data_output, fram
  *                      are currently outputing.
  * @return Return 0 if successful, -1 else.
  */
-static int decode_subframe_data(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, subframe_info_t* subframe_info, uint8_t channel_nb) {
+static uint16_t decode_subframe_data(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
-    uint8_t bits_per_sample = frame_info->bits_per_sample;
+    if(subframe_info->type == SUBFRAME_CONSTANT)
+        return decode_constant(data_input, data_output, frame_info, channel_nb, crt_sample, error_code);
+    else if(subframe_info->type == SUBFRAME_VERBATIM)
+        return decode_verbatim(data_input, data_output, frame_info, channel_nb, crt_sample, error_code);
+    else if((SUBFRAME_FIXED_LOW <= subframe_info->type) && (subframe_info->type <= SUBFRAME_FIXED_HIGH))
+        return decode_fixed(data_input, data_output, frame_info, channel_nb, crt_sample, error_code);
+    else if((SUBFRAME_LPC_LOW <= subframe_info->type) && (subframe_info->type <= SUBFRAME_LPC_HIGH))
+        return decode_lpc(data_input, data_output, frame_info, channel_nb, crt_sample, error_code);
+            return -1;
 
-    if((((frame_info->channel_assignement == LEFT_SIDE) || (frame_info->channel_assignement == MID_SIDE)) && (channel_nb == 1)) || ((frame_info->channel_assignement == RIGHT_SIDE) && (channel_nb == 0)))
-        ++bits_per_sample;
-
-    if(subframe_info->type == SUBFRAME_CONSTANT) {
-        if(decode_constant(data_input, data_output, frame_info, subframe_info, bits_per_sample, channel_nb) == -1)
-            return -1;
-    } else if(subframe_info->type == SUBFRAME_VERBATIM) {
-        if(decode_verbatim(data_input, data_output, frame_info, subframe_info, bits_per_sample, channel_nb) == -1)
-            return -1;
-    } else if((SUBFRAME_FIXED_LOW <= subframe_info->type) && (subframe_info->type <= SUBFRAME_FIXED_HIGH)) {
-        if(decode_fixed(data_input, data_output, frame_info, subframe_info, bits_per_sample, channel_nb) == -1)
-            return -1;
-    } else if((SUBFRAME_LPC_LOW <= subframe_info->type) && (subframe_info->type <= SUBFRAME_LPC_HIGH)) {
-        if(decode_lpc(data_input, data_output, frame_info, subframe_info, bits_per_sample, channel_nb) == -1)
-            return -1;
-    } else {
-        fprintf(stderr, "Invalid subframe type\n");
-        return -1;
-    }
+    fprintf(stderr, "Invalid subframe type\n");
+    *error_code = -1;
 
     return 0;
 
@@ -933,6 +1198,11 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
     uint8_t channel_nb = 0;
     frame_info_t frame_info;
     int nb_bits_to_write = 0;
+    #ifdef STEREO_ONLY
+    uint16_t crt_samples[2] = {0};
+    #else
+    uint16_t crt_samples[8] = {0};
+    #endif
 
     error_code = read_frame_header(data_input, stream_info, &frame_info);
     if(error_code == -1)
@@ -951,52 +1221,115 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
     data_output->starting_shift = data_output->shift;
 
     for(; channel_nb < stream_info->nb_channels; ++channel_nb) {
-        subframe_info_t subframe_info;
+        frame_info.subframes_info[channel_nb].has_parameters = 0;
+        frame_info.subframes_info[channel_nb].data_input_position = -1;
 
-        if(read_subframe_header(data_input, &subframe_info) == -1)
+        if(read_subframe_header(data_input, frame_info.subframe_info + channel_nb) == -1)
             return -1;
 
-        if(decode_subframe_data(data_input, data_output, &frame_info, &subframe_info, channel_nb) == -1)
-            return -1;
+        if((((frame_info->channel_assignement == LEFT_SIDE) || (frame_info->channel_assignement == MID_SIDE)) && (channel_nb == 1)) || ((frame_info->channel_assignement == RIGHT_SIDE) && (channel_nb == 0)))
+            frame_info.subframes_info[channel_nb].bits_per_sample = frame_info.bits_per_sample + 1;
+        else
+            frame_info.subframes_info[channel_nb].bits_per_sample = frame_info.bits_per_sample;
+    }
 
-        if((channel_nb + 1) < stream_info->nb_channels) {
-            switch(frame_info.bits_per_sample) {
-                case 8:
-                    data_output->position = data_output->starting_position + (channel_nb + 1);
-                    break;
-                case 12:
-                    data_output->position = data_output->starting_position + (channel_nb + 1);
-                    if(data_output->shift == 4) {
-                        data_output->shift = 0;
-                        ++data_output->position;
-                    } else {
-                        data_output->shift = 4;
-                    }
-                    break;
+    do {
+        for(channel_nb = 0; channel_nb < stream_info->nb_channels; ++channel_nb) {
+            crt_samples[channel_nb] = decode_subframe_data(data_input, data_output, &frame_info, channel_nb, crt_samples[channel_nb], &error_code)
+            if(error_code == -1)
+                return -1;
 
-                case 16:
-                    data_output->position = data_output->starting_position + ((channel_nb + 1) * 2);
-                    break;
-
-                case 20:
-                    data_output->position = data_output->starting_position + ((channel_nb + 1) * 2);
-                    if(data_output->shift == 4) {
-                        data_output->shift = 0;
-                        ++data_output->position;
-                    } else {
-                        data_output->shift = 4;
-                    }
-                    break;
-
-                case 24:
-                    data_output->position = data_output->starting_position + ((channel_nb + 1) * 3);
-                    break;
-
-                case 32:
-                    data_output->position = data_output->starting_position + ((channel_nb + 1) * 4);
+            if((channel_nb + 1) < stream_info->nb_channels) {
+                switch(frame_info.bits_per_sample) {
+#ifdef DECODE_8_BITS 
+                    case 8:
+                        data_output->position = data_output->starting_position + (channel_nb + 1);
+                        break;
+#endif
+#ifdef DECODE_12_BITS
+                    case 12:
+                        data_output->position = data_output->starting_position + (channel_nb + 1);
+                        if(data_output->shift == 4) {
+                            data_output->shift = 0;
+                            ++data_output->position;
+                        } else {
+                            data_output->shift = 4;
+                        }
+                        break;
+#endif
+#ifdef DECODE_16_BITS
+                    case 16:
+                        data_output->position = data_output->starting_position + ((channel_nb + 1) * 2);
+                        break;
+#endif
+#ifdef DECODE_20_BITS
+                    case 20:
+                        data_output->position = data_output->starting_position + ((channel_nb + 1) * 2);
+                        if(data_output->shift == 4) {
+                            data_output->shift = 0;
+                            ++data_output->position;
+                        } else {
+                            data_output->shift = 4;
+                        }
+                        break;
+#endif
+#ifdef DECODE_24_BITS
+                    case 24:
+                        data_output->position = data_output->starting_position + ((channel_nb + 1) * 3);
+                        break;
+#endif
+#ifdef DECODE_32_BITS
+                    case 32:
+                        data_output->position = data_output->starting_position + ((channel_nb + 1) * 4);
+#endif
+                }
+            } else {
+                switch(frame_info.bits_per_sample) {
+#ifdef DECODE_8_BITS 
+                    case 8:
+                        data_output->position = data_output->starting_position + (crt_samples[channel_nb] * frame_info.nb_channels);
+                        break;
+#endif
+#ifdef DECODE_12_BITS
+                    case 12:
+                        data_output->position = data_output->starting_position + (crt_samples[channel_nb] * frame_info.nb_channels);
+                        if(data_output->shift == 4) {
+                            data_output->shift = 0;
+                            ++data_output->position;
+                        } else {
+                            data_output->shift = 4;
+                        }
+                        break;
+#endif
+#ifdef DECODE_16_BITS
+                    case 16:
+                        data_output->position = data_output->starting_position + ((channel_nb + 1) * 2);
+                        break;
+#endif
+#ifdef DECODE_20_BITS
+                    case 20:
+                        data_output->position = data_output->starting_position + ((channel_nb + 1) * 2);
+                        if(data_output->shift == 4) {
+                            data_output->shift = 0;
+                            ++data_output->position;
+                        } else {
+                            data_output->shift = 4;
+                        }
+                        break;
+#endif
+#ifdef DECODE_24_BITS
+                    case 24:
+                        data_output->position = data_output->starting_position + ((channel_nb + 1) * 3);
+                        break;
+#endif
+#ifdef DECODE_32_BITS
+                    case 32:
+                        data_output->position = data_output->starting_position + ((channel_nb + 1) * 4);
+#endif
+                }
             }
         }
-    }
+    }while();
 
     if(data_input->shift != 0) {
         data_input->shift = 0;
