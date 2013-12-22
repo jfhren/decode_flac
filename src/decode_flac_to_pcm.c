@@ -22,14 +22,23 @@
 
 int main(int argc, char* argv[]) {
 
+    uint8_t output_per_frame = 0;
     int opt = -1;
-    struct option options[] = {{"unsigned", 0, NULL, 'u'}, {"big-endian", 0, NULL, 'b'}, {NULL, 0, NULL, 0}};
+    struct option options[] = {
+        {"unsigned",         no_argument,       NULL, 'u'},
+        {"big-endian",       no_argument,       NULL, 'b'},
+        {"input-size",       required_argument, NULL, 'i'},
+        {"output-per-frame", no_argument,       NULL, 'f'},
+        {NULL,               0,                 NULL,  0 }
+    };
     data_input_t data_input = {0};
     data_output_t data_output = {0};
     stream_info_t stream_info = {0};
 
     data_output.is_little_endian = 1;
     data_output.is_signed = 1;
+
+    data_input.size = 1024;
 
     while((opt = getopt_long(argc, argv, "", options, NULL)) > -1)
         switch(opt) {
@@ -41,8 +50,20 @@ int main(int argc, char* argv[]) {
                 data_output.is_signed = 0;
                 break;
 
+            case 'i':
+                data_input.size = atoi(optarg);
+                if(data_input.size < 42) {
+                    fprintf(stderr, "The size of the input should be greater than 42 bytes\n");
+                    return EXIT_FAILURE;
+                }
+                break;
+
+            case 'f':
+                output_per_frame = 1;
+                break;
+
             case '?':
-                fprintf(stderr, "Usage: %s [--big-endian] [--unsigned] flac_file [output_filename]\n", argv[0]);
+                fprintf(stderr, "Usage: %s [--big-endian] [--unsigned] [--input-size bytes] [--output-per-frane] flac_file [output_filename]\n", argv[0]);
                 return EXIT_FAILURE;
         }
 
@@ -56,7 +77,6 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    data_input.size = 10192;
     data_input.buffer = (uint8_t*)malloc(sizeof(uint8_t) * data_input.size);
     if(data_input.buffer == NULL) {
         perror("An error occured while allocating the input buffer");
@@ -90,7 +110,10 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "bits_per_sample: %u\n", stream_info.bits_per_sample);
     fprintf(stderr, "nb_samples: %" PRIu64 "\n", stream_info.nb_samples);
 
-    data_output.size = (stream_info.nb_samples * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
+    if(output_per_frame)
+        data_output.size = (stream_info.max_block_size * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
+    else
+        data_output.size = (stream_info.nb_samples * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
     data_output.buffer = (uint8_t*)malloc(sizeof(uint8_t) * data_output.size);
     if(data_output.buffer == NULL) {
         perror("An error occured while allocating the output buffer");
@@ -102,11 +125,11 @@ int main(int argc, char* argv[]) {
     data_output.position = 0;
     data_output.shift = 0;
 
-    if(decode_flac_data(&data_input, &data_output, &stream_info) == -1)
+    if(decode_flac_data(&data_input, &data_output, &stream_info, output_per_frame) == -1)
         return EXIT_FAILURE;
 
-    if(dump_buffer(&data_output, data_output.size) == -1)
-        return EXIT_FAILURE;
+    if(!output_per_frame)
+        dump_buffer(&data_output, data_output.size);
 
     fprintf(stderr, "header md5: %.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x\n", stream_info.md5[0], stream_info.md5[1], stream_info.md5[2], stream_info.md5[3], stream_info.md5[4], stream_info.md5[5], stream_info.md5[6], stream_info.md5[7], stream_info.md5[8], stream_info.md5[9], stream_info.md5[10], stream_info.md5[11], stream_info.md5[12], stream_info.md5[13], stream_info.md5[14], stream_info.md5[15]);
 

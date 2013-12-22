@@ -913,16 +913,18 @@ static int decode_subframe_data(data_input_t* data_input, data_output_t* data_ou
  *                    there.
  * @param data_output The decoded samples are outputed there.
  * @param stream_info Useful for the decoding the frame header.
+ * @param output_per_sample Should the output done after each decoded frame.
  * @return Return 1 if successful, 0 if the previous frame was probably the
  *         last cause we hit an EOF or whatever else relevant in this case or
  *         -1 in case of unexpected error.
  */
-static int decode_frame(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info) {
+static int decode_frame(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info, uint8_t output_per_sample) {
 
     int error_code = 0;
     uint8_t channel_nb = 0;
     frame_info_t frame_info;
     int nb_bits_to_write = 0;
+    int nb_bytes_to_write = 0;
 
     error_code = read_frame_header(data_input, stream_info, &frame_info);
     if(error_code == -1)
@@ -998,15 +1000,27 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
     if(error_code == -1)
         return -1;
 
-    nb_bits_to_write = frame_info.block_size * stream_info->nb_channels * frame_info.bits_per_sample;
-    data_output->position = data_output->starting_position + (nb_bits_to_write / 8);
-    data_output->shift = data_output->starting_shift;
-    if(nb_bits_to_write % 8) {
-        if(data_output->shift == 4) {
-            data_output->shift = 0;
-            data_output->position += 1;
-        } else
+    
+    nb_bits_to_write = (frame_info.block_size * stream_info->nb_channels * frame_info.bits_per_sample) + data_output->starting_shift;
+    nb_bytes_to_write = nb_bits_to_write / 8;
+
+    if(output_per_sample) {
+        dump_buffer(data_output, nb_bytes_to_write);
+
+        data_output->position = 0;
+
+        if(nb_bits_to_write % 8) {
+            data_output->buffer[0] = data_output->buffer[nb_bytes_to_write];
             data_output->shift = 4;
+        } else {
+            data_output->shift = 0;
+        }
+    } else {
+        data_output->position = data_output->starting_position + nb_bytes_to_write;
+        if(nb_bits_to_write % 8)
+            data_output->shift = 4;
+        else
+            data_output->shift = 0;
     }
 
     return 1;
@@ -1038,15 +1052,17 @@ int decode_flac_metadata(data_input_t* data_input, stream_info_t* stream_info) {
  * @param data_input  The stream is read from there.
  * @param data_output The decoded samples are outputed there.
  * @param stream_info Useful for the decoding frame headers.
+ * @param output_per_sample Should the output done after each decoded frame.
  * @return Return 0 if successful, -1 else.
  */
-int decode_flac_data(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info) {
+int decode_flac_data(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info, uint8_t output_per_frame) {
 
     int error_code = 0;
 
-    while((error_code = decode_frame(data_input, data_output, stream_info)) > 0)
-    if(error_code == -1)
-        return -1;
+    while((error_code = decode_frame(data_input, data_output, stream_info, output_per_frame)) > 0);
+
+        if(error_code == -1)
+            return -1;
 
     return 0;
 

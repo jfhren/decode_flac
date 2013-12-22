@@ -93,8 +93,9 @@ int decode_flac_metadata(data_input_t* data_input, stream_info_t* stream_info);
  * @param data_input  The stream is read from there.
  * @param data_output The decoded samples are outputed there.
  * @param stream_info Useful for the decoding frame headers.
+ * @param output_per_sample Should the output done after each decoded frame.
  * @return Return 0 if successful, -1 else.
  */
-int decode_flac_data(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info);
+int decode_flac_data(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info, uint8_t output_per_sample);
 
 #endif
