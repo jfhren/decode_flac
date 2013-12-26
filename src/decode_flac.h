@@ -96,7 +96,7 @@ struct rice_coding_info_t {
     uint8_t has_escape_code;
     uint8_t escape_bits_per_sample;
     uint16_t remaining_nb_samples;
-}
+};
 
 typedef struct {
     /* Tell how the sample are encoded within the subframe. */
@@ -113,8 +113,8 @@ typedef struct {
     struct previous_value_t previous_values[32];
     struct previous_value_t* next_out;
 
-    uint8_t lpc_precision = 0;
-    int8_t lpc_shift = 0;
+    uint8_t lpc_precision;
+    int8_t lpc_shift;
     int16_t coeffs[32];
 
     struct rice_coding_info_t residual_info;

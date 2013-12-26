@@ -15,14 +15,18 @@
 
 
 int get_position(data_input_t* data_input) {
-    return 0;
+    return lseek(data_input->fd, 0, SEEK_CUR);
 }
 
 int skip_to_position(data_input_t* data_input, int position) {
+    lseek(data_output->fd, position, SEEK_SET);
+    data_
+    refill_input_buffer
     return 0;
 }
 
 int skip_nb_bytes(data_input_t* data_input, int nb_bytes_to_skip) {
+    lseek(data_output->fd, 
     return 0;
 }
 

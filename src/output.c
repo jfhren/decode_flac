@@ -84,6 +84,9 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
     uint8_t shift = data_output->shift;
 #endif
 
+    if(((position * 8) + shift + sample_size) > (data_output->write_size * 8))
+        return 0;
+
     switch(channel_assignement) {
         case LEFT_SIDE:
             if(channel_nb == 0) {
@@ -1052,6 +1055,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
 #endif
     }
 
-    return 0;
+    return 1;
 
 }
