@@ -15,19 +15,37 @@
 
 
 int get_position(data_input_t* data_input) {
-    return lseek(data_input->fd, 0, SEEK_CUR);
+    return lseek(data_input->fd, 0, SEEK_CUR) - (data_input->read_size - data_input->position);
 }
 
 int skip_to_position(data_input_t* data_input, int position) {
-    lseek(data_output->fd, position, SEEK_SET);
-    data_
-    refill_input_buffer
-    return 0;
+    lseek(data_input->fd, position, SEEK_SET);
+
+    data_input->read_size = data_input->size;
+    data_input->position = data_input->size;
+    data_input->shift = 0;
+
+    return (refill_input_buffer(data_input) > -1) ? 0 : -1;
+
 }
 
-int skip_nb_bytes(data_input_t* data_input, int nb_bytes_to_skip) {
-    lseek(data_output->fd, 
+int skip_nb_bits(data_input_t* data_input, int nb_bits_to_skip) {
+    /* First implementation: it's stupid but it should work... ? */
+    int nb_bytes_to_skip = nb_bits_to_skip / 8 + ((data_input->shift + (nb_bits_to_skip % 8)) / 8);
+    uint8_t new_shift = (data_input->shift + (nb_bits_to_skip % 8)) % 8;
+
+    lseek(data_input->fd, nb_bytes_to_skip - (data_input->read_size - data_input->position), SEEK_CUR);
+
+    data_input->read_size = data_input->size;
+    data_input->position = data_input->size;
+    data_input->shift = 0;
+
+    if(refill_input_buffer(data_input) == -1)
+        return -1;
+
+    data_input->shift = new_shift;
     return 0;
+
 }
 
 
@@ -77,8 +95,8 @@ int refill_input_buffer_at_least(data_input_t* data_input, int nb_needed_bytes) 
  * bytes in the input buffer.
  * @param data_input Contain the input buffer and the necessary information to
  *                   refill it.
- * @return Return 1 if the refill was complete, 0 if it was a partial one or -1
- *                  if an error occured.
+ * @return Return 1 if the refill was successful, 0 if nothing was read or -1
+ *         if an error occured.
  */
 int refill_input_buffer(data_input_t* data_input) {
 
@@ -111,7 +129,7 @@ int refill_input_buffer(data_input_t* data_input) {
     data_input->read_size = total_nb_read_bytes;
     data_input->position = 0;
 
-    if(nb_read_bytes == 0)
+    if(data_input->read_size == 0)
         return 0;
 
     return 1;

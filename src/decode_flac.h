@@ -18,12 +18,15 @@
 
 /* We define the types for decoded data. */
 #ifdef DECODE_32_BITS
+    #define DECODE_TYPE_64_BITS
     #define DECODE_UTYPE uint64_t
     #define DECODE_TYPE int64_t
 #elif defined DECODE_16_BITS || defined DECODE_20_BITS || defined DECODE_24_BITS
+    #define DECODE_TYPE_32_BITS
     #define DECODE_UTYPE uint32_t
     #define DECODE_TYPE int32_t
 #else
+    #define DECODE_TYPE_16_BITS
     #define DECODE_UTYPE uint16_t
     #define DECODE_TYPE int16_t
 #endif
@@ -108,6 +111,8 @@ typedef struct {
     uint8_t bits_per_sample;
 
     int data_input_position;
+    uint8_t data_input_shift;
+
     DECODE_UTYPE value;
 
     struct previous_value_t previous_values[32];

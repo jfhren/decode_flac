@@ -90,7 +90,44 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "bits_per_sample: %u\n", stream_info.bits_per_sample);
     fprintf(stderr, "nb_samples: %" PRIu64 "\n", stream_info.nb_samples);
 
-    data_output.size = (stream_info.nb_samples * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
+#ifndef DECODE_8_BITS
+    if(stream_info.bits_per_sample == 8) {
+        fprintf(stderr, "bits per sample not supported: 8 bits\n");
+        return EXIT_FAILURE;
+    }   
+#endif
+#ifndef DECODE_12_BITS
+    if(stream_info.bits_per_sample == 12) {
+        fprintf(stderr, "bits per sample not supported: 12 bits\n");
+        return EXIT_FAILURE;
+    }   
+#endif
+#ifndef DECODE_16_BITS
+    if(stream_info.bits_per_sample == 16) {
+        fprintf(stderr, "bits per sample not supported: 16 bits\n");
+        return EXIT_FAILURE;
+    }   
+#endif
+#ifndef DECODE_20_BITS
+    if(stream_info.bits_per_sample == 20) {
+        fprintf(stderr, "bits per sample not supported: 20 bits\n");
+        return EXIT_FAILURE;
+    }   
+#endif
+#ifndef DECODE_24_BITS
+    if(stream_info.bits_per_sample == 24) {
+        fprintf(stderr, "bits per sample not supported: 24 bits\n");
+        return EXIT_FAILURE;
+    }   
+#endif
+#ifndef DECODE_32_BITS
+    if(stream_info.bits_per_sample == 32) {
+        fprintf(stderr, "bits per sample not supported: 32 bits\n");
+        return EXIT_FAILURE;
+    }   
+#endif
+
+    data_output.size = 960;//(stream_info.nb_samples * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
     data_output.buffer = (uint8_t*)malloc(sizeof(uint8_t) * data_output.size);
     if(data_output.buffer == NULL) {
         perror("An error occured while allocating the output buffer");
@@ -105,8 +142,8 @@ int main(int argc, char* argv[]) {
     if(decode_flac_data(&data_input, &data_output, &stream_info) == -1)
         return EXIT_FAILURE;
 
-    if(dump_buffer(&data_output, data_output.size) == -1)
-        return EXIT_FAILURE;
+//    if(dump_buffer(&data_output, data_output.size) == -1)
+//        return EXIT_FAILURE;
 
     fprintf(stderr, "header md5: %.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x\n", stream_info.md5[0], stream_info.md5[1], stream_info.md5[2], stream_info.md5[3], stream_info.md5[4], stream_info.md5[5], stream_info.md5[6], stream_info.md5[7], stream_info.md5[8], stream_info.md5[9], stream_info.md5[10], stream_info.md5[11], stream_info.md5[12], stream_info.md5[13], stream_info.md5[14], stream_info.md5[15]);
 

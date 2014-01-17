@@ -23,13 +23,15 @@
  */
 DECODE_TYPE convert_to_signed(DECODE_UTYPE value, uint8_t size) {
 
-#if DECODE_UTYPE == uint16_t
+#ifdef DECODE_TYPE_16_BITS
     return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFu) << size) | value : value;
-#elif DECODE_UTYPE == uint32_t
+#elif defined DECODE_TYPE_32_BITS
     return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFFFFFu) << size) | value : value;
-#else
+#elif defined DECODE_TYPE_64_BITS
     return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFFFFFFFFFFFFFull) << size) | value : value;
-#endif 
+#else
+    #error "Should not happen but kinda did."
+#endif
 
 }
 
@@ -82,10 +84,13 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
     uint32_t position = data_output->position;
 #if defined DECODE_12_BITS || defined DECODE_20_BITS
     uint8_t shift = data_output->shift;
-#endif
 
-    if(((position * 8) + shift + sample_size) > (data_output->write_size * 8))
+    if(((position * 8) + shift + sample_size) > ((uint32_t)(data_output->write_size * 8)))
         return 0;
+#else
+    if((position + sample_size) > (uint32_t)data_output->write_size)
+        return 0;
+#endif
 
     switch(channel_assignement) {
         case LEFT_SIDE:
