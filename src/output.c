@@ -64,6 +64,8 @@ int dump_buffer(data_output_t* data_output, int nb_bytes) {
 
 }
 
+static uint32_t nb_bytes = 0;
+
 
 /**
  * Output a sample while taking care of its size, channel number and channel
@@ -85,12 +87,19 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
 #if defined DECODE_12_BITS || defined DECODE_20_BITS
     uint8_t shift = data_output->shift;
 
-    if(((position * 8) + shift + sample_size) > ((uint32_t)(data_output->write_size * 8)))
-        return 0;
+    if((((channel_assignement == LEFT_SIDE) || (channel_assignement == MID_SIDE)) && (channel_nb == 1)) || ((channel_assignement == RIGHT_SIDE) && (channel_nb == 0))) {
+        if(((position * 8) + shift + sample_size - 1) > ((uint32_t)(data_output->write_size * 8)))
+            return 0;
+    } else {
+        if(((position * 8) + shift + sample_size) > ((uint32_t)(data_output->write_size * 8)))
+            return 0;
+    }
 #else
-    if((position + sample_size) > (uint32_t)data_output->write_size)
+    if((position + (sample_size / 8)) > (uint32_t)data_output->write_size)
         return 0;
 #endif
+
+    nb_bytes += (sample_size / 8);
 
     switch(channel_assignement) {
         case LEFT_SIDE:

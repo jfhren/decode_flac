@@ -127,7 +127,7 @@ int main(int argc, char* argv[]) {
     }   
 #endif
 
-    data_output.size = 960;//(stream_info.nb_samples * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
+    data_output.size = 1920;//(stream_info.nb_samples * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
     data_output.buffer = (uint8_t*)malloc(sizeof(uint8_t) * data_output.size);
     if(data_output.buffer == NULL) {
         perror("An error occured while allocating the output buffer");

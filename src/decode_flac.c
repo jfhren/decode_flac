@@ -612,7 +612,6 @@ static uint16_t decode_verbatim(data_input_t* data_input, data_output_t* data_ou
 static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
     uint8_t order = frame_info->subframes_info[channel_nb].type - 8;
-//    struct rice_coding_info_t residual_info = {0};
 
     if(order == 0) {
         if(!frame_info->subframes_info[channel_nb].has_parameters) {
@@ -904,7 +903,6 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
 
     uint8_t order = (frame_info->subframes_info[channel_nb].type & 0x1F) + 1;
     static uint32_t dividers[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536};
-//    struct rice_coding_info_t residual_info;
 
     if(!frame_info->subframes_info[channel_nb].has_parameters) {
         uint8_t i = 0;
@@ -1254,6 +1252,8 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
         nb_bits_to_write = nb_read_samples * stream_info->nb_channels * frame_info.bits_per_sample + data_output->starting_shift;
         nb_bytes_to_write = nb_bits_to_write / 8;
         dump_buffer(data_output, nb_bytes_to_write);
+
+        nb_read_samples = crt_samples[0];
         data_output->position = 0;
         if(nb_bits_to_write % 8) {
             data_output->shift = 4;
