@@ -15,11 +15,96 @@
 
 
 /**
+ * Get the position in the input stream for later skipping back.
+ *
+ * @param data_input Bits and bytes are read from there.
+ *
+ * @return Return the position.
+ */
+int get_position(data_input_t* data_input) {
+    return lseek(data_input->fd, 0, SEEK_CUR) - (data_input->read_size - data_input->position);
+}
+
+
+/**
+ * Skip to a saved position in the input stream.
+ *
+ * @param data_input     Bits and bytes are read from there.
+ * @param position   The position to skip to.
+ *
+ * @return Return -1 if an error occurred, 0 else.
+ */
+int skip_to_position(data_input_t* data_input, int position) {
+    off_t crt_position = lseek(data_input->fd, 0, SEEK_CUR);
+    if(position == -1) {
+        perror("Error while skipping to position");
+        return -1;
+    }
+
+    if((position >= (crt_position - data_input->read_size)) && (position < crt_position)) {
+        data_input->position = data_input->read_size - (crt_position - position);
+        return 0;
+    }
+
+    if(lseek(data_input->fd, position, SEEK_SET) == -1) {
+        perror("Error while skipping to position");
+        return -1;
+    }
+
+    data_input->read_size = data_input->size;
+    data_input->position = data_input->size;
+    data_input->shift = 0;
+
+    return (refill_input_buffer(data_input) > -1) ? 0 : -1;
+
+}
+
+
+/**
+ * Skip a given number of bits and refill the buffer if necessary.
+ *
+ * @param data_input     Bits and bytes are read from there.
+ * @param nb_bits_to_skip The number of bits to skip.
+ *
+ * @return Return -1 if an error occurred, 0 else.
+ */
+int skip_nb_bits(data_input_t* data_input, int nb_bits_to_skip) {
+
+    int nb_bytes_to_skip = nb_bits_to_skip / 8 + ((data_input->shift + (nb_bits_to_skip % 8)) / 8);
+    uint8_t new_shift = (data_input->shift + (nb_bits_to_skip % 8)) % 8;
+
+    if((data_input->position + nb_bytes_to_skip) < data_input->read_size) {
+        data_input->position += nb_bytes_to_skip;
+        data_input->shift = new_shift;
+        return 0;
+    }
+
+    if(lseek(data_input->fd, nb_bytes_to_skip - (data_input->read_size - data_input->position), SEEK_CUR) == -1) {
+        perror("Error while skipping to position");
+        return -1;
+    }
+
+    data_input->read_size = data_input->size;
+    data_input->position = data_input->size;
+    data_input->shift = 0;
+
+    if(refill_input_buffer(data_input) != 1)
+        return -1;
+
+    data_input->shift = new_shift;
+    return 0;
+
+}
+
+
+/**
  * Test to see if the input should be reflled before having access to the
  * desired number of bytes.
+ *
  * @param data_input      Contain the input buffer and the necessary
  *                        information to test it.
  * @param nb_needed_bytes The number of needed bytes.
+ *
  * @return Return 1 if the buffer should be refilled, 0 else.
  */
 int should_refill_input_buffer(data_input_t* data_input, int nb_needed_bytes) {
@@ -31,9 +116,11 @@ int should_refill_input_buffer(data_input_t* data_input, int nb_needed_bytes) {
 
 /**
  * Try to refill the input buffer with at least the desired number of bytes.
+ *
  * @param data_input      Contain the input buffer and the necessary
  *                        information to refill it.
  * @param nb_needed_bytes The number of needed bytes.
+ *
  * @return Return 0 if at least the buffer was refilled of the desired number
  *         of bytes, -1 else.
  */
@@ -45,7 +132,7 @@ int refill_input_buffer_at_least(data_input_t* data_input, int nb_needed_bytes) 
         return -1;
 
     if((error_code == 0) && (data_input->size >= nb_needed_bytes) && ((data_input->read_size - data_input->position) < nb_needed_bytes)) {
-        fprintf(stderr, "Unexpected end of file.\n");
+        fprintf(stderr, "1: Unexpected end of file.\n");
         return -1;
     }
 
@@ -55,13 +142,14 @@ int refill_input_buffer_at_least(data_input_t* data_input, int nb_needed_bytes) 
 
 
 /**
- * Try to refill the input buffer.
- * Refill the input buffer from the last position while preserving any unused
- * bytes in the input buffer.
+ * Try to refill the input buffer from the last position while preserving any
+ * unused bytes in the input buffer.
+ *
  * @param data_input Contain the input buffer and the necessary information to
  *                   refill it.
- * @return Return 1 if the refill was complete, 0 if it was a partial one or -1
- *                  if an error occured.
+ *
+ * @return Return 1 if the refill was successful, 0 if nothing was read or -1
+ *         if an error occurred.
  */
 int refill_input_buffer(data_input_t* data_input) {
 
@@ -87,14 +175,14 @@ int refill_input_buffer(data_input_t* data_input) {
     }
 
     if(nb_read_bytes == -1) {
-        perror("An error occured while refilling the input buffer");
+        perror("An error occurred while refilling the input buffer");
         return -1;
     }
 
     data_input->read_size = total_nb_read_bytes;
     data_input->position = 0;
 
-    if(nb_read_bytes == 0)
+    if(data_input->read_size == 0)
         return 0;
 
     return 1;
@@ -104,14 +192,23 @@ int refill_input_buffer(data_input_t* data_input) {
 
 /**
  * Get bits from the input taking into shift in byte.
+ *
  * @param data_input     Bits and bytes are read from there.
  * @param requested_size The number of bits to get.
  * @param error_code     If any error occurs, it will be equal to -1.
+ *
  * @return Return the requested bits.
  */
+#ifdef DISALLOW_64_BITS
+uint32_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int* error_code) {
+
+    uint64_t value = 0;
+#else
 uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int* error_code) {
 
     uint64_t value = 0;
+#endif
+
     uint8_t nb_needed_bits = (requested_size + data_input->shift);
     uint8_t nb_needed_bytes = nb_needed_bits / 8;
     uint8_t* buffer = NULL;
@@ -130,7 +227,7 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
             return 0;
 
         if((*error_code == 0) && ((data_input->read_size - data_input->position) < nb_needed_bytes)) {
-            fprintf(stderr, "Unexpected end of file.\n");
+            fprintf(stderr, "2: Unexpected end of file.\n");
             *error_code = -1;
             return 0;
         }
@@ -160,6 +257,7 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
                 data_input->position += 4;
                 return value;
 
+#ifndef DISALLOW_64_BITS
             case 40:
                 value = ((int64_t)buffer[position] << 32) | (buffer[position + 1] << 24) | (buffer[position + 2] << 16) | (buffer[position + 3] << 8) | buffer[position + 4];
                 data_input->position += 5;
@@ -179,6 +277,7 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
                 value = ((int64_t)buffer[position] << 56) | ((int64_t)buffer[position + 1] << 48) | ((int64_t)buffer[position + 2] << 40) | ((int64_t)buffer[position + 3] << 32) | (buffer[position + 4] << 24) | (buffer[position + 5] << 16) | (buffer[position + 6] << 8) | buffer[position + 7];
                 data_input->position += 8;
                 return value;
+#endif
         }
     }
 
@@ -197,7 +296,9 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
         value = ((buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] >> (32 - nb_needed_bits));
         data_input->position += 3;
         data_input->shift = nb_needed_bits - 24;
-    } else if(nb_needed_bits < 40) {
+    }
+#ifndef DISALLOW_64_BITS
+     else if(nb_needed_bits < 40) {
         value = ((int64_t)(buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] >> (40 - nb_needed_bits));
         data_input->position += 4;
         data_input->shift = nb_needed_bits - 32;
@@ -218,6 +319,7 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
         data_input->position += 8;
         data_input->shift = nb_needed_bits - 64;
     }
+#endif
 
     return value;
 

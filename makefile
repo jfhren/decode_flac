@@ -1,6 +1,6 @@
 CC := gcc
-CFLAGS := -pedantic -W -Wall -Werror -std=c99 -g
-#CFLAGS := -pedantic -W -Wall -Werror -std=c99 -g -DSTEREO_ONLY
+CFLAGS := -pedantic -W -Wall -Werror -std=c99 -g -DDECODE_8_BITS -DDECODE_12_BITS -DDECODE_16_BITS -DDECODE_20_BITS -DDECODE_24_BITS -DDECODE_32_BITS
+#CFLAGS := -pedantic -W -Wall -Werror -std=c99 -gp -DDECODE_16_BITS -DSTEREO_ONLY
 SRC_DIR := ./src/
 OBJ_DIR := ./obj/
 BIN_DIR := ./bin/

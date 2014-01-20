@@ -22,14 +22,13 @@
 
 int main(int argc, char* argv[]) {
 
-    uint8_t output_per_frame = 0;
     int opt = -1;
     struct option options[] = {
-        {"unsigned",         no_argument,       NULL, 'u'},
-        {"big-endian",       no_argument,       NULL, 'b'},
-        {"input-size",       required_argument, NULL, 'i'},
-        {"output-per-frame", no_argument,       NULL, 'f'},
-        {NULL,               0,                 NULL,  0 }
+        {"unsigned",        no_argument,       NULL, 'u'},
+        {"big-endian",      no_argument,       NULL, 'b'},
+        {"input-size",      required_argument, NULL, 'i'},
+        {"max-output-size", required_argument, NULL, 'o'},
+        {NULL,                     0,                 NULL,  0 }
     };
     data_input_t data_input = {0};
     data_output_t data_output = {0};
@@ -37,6 +36,9 @@ int main(int argc, char* argv[]) {
 
     data_output.is_little_endian = 1;
     data_output.is_signed = 1;
+    data_output.size = 1920;
+
+    data_input.size = 10192;
 
     data_input.size = 1024;
 
@@ -58,17 +60,17 @@ int main(int argc, char* argv[]) {
                 }
                 break;
 
-            case 'f':
-                output_per_frame = 1;
+            case 'o':
+                data_output.size = atoi(optarg);
                 break;
 
             case '?':
-                fprintf(stderr, "Usage: %s [--big-endian] [--unsigned] [--input-size bytes] [--output-per-frane] flac_file [output_filename]\n", argv[0]);
+                fprintf(stderr, "Usage: %s [--big-endian] [--unsigned] [--input-size bytes] [--max-output-size bytes] flac_file [output_filename]\n", argv[0]);
                 return EXIT_FAILURE;
         }
 
     if(optind == argc) {
-        fprintf(stderr, "Usage: %s [--big-endian] [--unsigned] flac_file [output_filename]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--big-endian] [--unsigned] [--input-size bytes] [--max-output-size bytes] flac_file [output_filename]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
@@ -110,10 +112,54 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "bits_per_sample: %u\n", stream_info.bits_per_sample);
     fprintf(stderr, "nb_samples: %" PRIu64 "\n", stream_info.nb_samples);
 
-    if(output_per_frame)
-        data_output.size = (stream_info.max_block_size * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
-    else
-        data_output.size = (stream_info.nb_samples * stream_info.bits_per_sample * stream_info.nb_channels) / 8;
+#ifndef DECODE_8_BITS
+    if(stream_info.bits_per_sample == 8) {
+        fprintf(stderr, "bits per sample not supported: 8 bits\n");
+        return EXIT_FAILURE;
+    }
+#endif
+#ifndef DECODE_12_BITS
+    if(stream_info.bits_per_sample == 12) {
+        fprintf(stderr, "bits per sample not supported: 12 bits\n");
+        return EXIT_FAILURE;
+    }
+#endif
+#ifndef DECODE_16_BITS
+    if(stream_info.bits_per_sample == 16) {
+        fprintf(stderr, "bits per sample not supported: 16 bits\n");
+        return EXIT_FAILURE;
+    }
+#endif
+#ifndef DECODE_20_BITS
+    if(stream_info.bits_per_sample == 20) {
+        fprintf(stderr, "bits per sample not supported: 20 bits\n");
+        return EXIT_FAILURE;
+    }
+#endif
+#ifndef DECODE_24_BITS
+    if(stream_info.bits_per_sample == 24) {
+        fprintf(stderr, "bits per sample not supported: 24 bits\n");
+        return EXIT_FAILURE;
+    }
+#endif
+#ifndef DECODE_32_BITS
+    if(stream_info.bits_per_sample == 32) {
+        fprintf(stderr, "bits per sample not supported: 32 bits\n");
+        return EXIT_FAILURE;
+    }
+#endif
+
+    if((stream_info.bits_per_sample != 8) &&
+       (stream_info.bits_per_sample != 12) &&
+       (stream_info.bits_per_sample != 16) &&
+       (stream_info.bits_per_sample != 20) &&
+       (stream_info.bits_per_sample != 24) &&
+       (stream_info.bits_per_sample != 32)) {
+        fprintf(stderr, "bits per sample not supported: %u\n", stream_info.bits_per_sample);
+        return EXIT_FAILURE;
+    }
+
+    data_output.size = (data_output.size / (stream_info.bits_per_sample * stream_info.nb_channels)) * stream_info.bits_per_sample * stream_info.nb_channels;
     data_output.buffer = (uint8_t*)malloc(sizeof(uint8_t) * data_output.size);
     if(data_output.buffer == NULL) {
         perror("An error occured while allocating the output buffer");
@@ -125,11 +171,8 @@ int main(int argc, char* argv[]) {
     data_output.position = 0;
     data_output.shift = 0;
 
-    if(decode_flac_data(&data_input, &data_output, &stream_info, output_per_frame) == -1)
+    if(decode_flac_data(&data_input, &data_output, stream_info.bits_per_sample, stream_info.nb_channels) == -1)
         return EXIT_FAILURE;
-
-    if(!output_per_frame)
-        dump_buffer(&data_output, data_output.size);
 
     fprintf(stderr, "header md5: %.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x\n", stream_info.md5[0], stream_info.md5[1], stream_info.md5[2], stream_info.md5[3], stream_info.md5[4], stream_info.md5[5], stream_info.md5[6], stream_info.md5[7], stream_info.md5[8], stream_info.md5[9], stream_info.md5[10], stream_info.md5[11], stream_info.md5[12], stream_info.md5[13], stream_info.md5[14], stream_info.md5[15]);
 

@@ -9,6 +9,35 @@
 #define DECODE_FLAC_H
 #include <stdint.h>
 
+
+/**
+ * If 64 bits integers are disallowed then 32 bits flac decoding is not
+ * available.
+ */
+#ifdef DISALLOW_64_BITS
+    #undef DECODE_32_BITS
+#endif
+
+/**
+ * We define the types for decoded data.
+ */
+#ifdef DECODE_32_BITS
+    #define DECODE_TYPE_64_BITS
+    #define DECODE_UTYPE uint64_t
+    #define DECODE_TYPE int64_t
+#elif defined DECODE_16_BITS || defined DECODE_20_BITS || defined DECODE_24_BITS
+    #define DECODE_TYPE_32_BITS
+    #define DECODE_UTYPE uint32_t
+    #define DECODE_TYPE int32_t
+#else
+    #define DECODE_TYPE_16_BITS
+    #define DECODE_UTYPE uint16_t
+    #define DECODE_TYPE int16_t
+#endif
+
+/**
+ * We include then now since they need the previously defined preprocessor values.
+ */
 #include "input.h"
 #include "output.h"
 
@@ -38,64 +67,53 @@
 #define RIGHT_SIDE                                                    9
 #define MID_SIDE                                                      10
 
+/**
+ * Information about the flac stream.
+ */
 typedef struct {
-    /* The minimum number of samples in a block (across channels.) */
-    uint16_t min_block_size;
-    /* The maximum number of samples in a black (across channels.) Might be
-       usefull for data output buffer allocation. */
-    uint16_t max_block_size;
-    /* The minimum size in bytes of a frame. 0 if unknow. */
-    uint32_t min_frame_size;
-    /* The maximum size in bytes of a frame (might be usefull for data input
-       buffer allocation.) 0 if unknow. */
-    uint32_t max_frame_size;
-    /* The sample rate of the stream. */
-    uint32_t sample_rate;
-    /* The number of channels of the stream. */
-    uint8_t nb_channels;
-    /* The number of bits used to represent a sample. */
-    uint8_t bits_per_sample;
-    /* The number of encoded samples. 0 if unknow. */
-    uint64_t nb_samples;
-    /* The md5 of the original pcm */
-    uint8_t md5[16];
+    uint16_t min_block_size;    /**< The minimum number of samples in a block
+                                     (across channels.) */
+    uint16_t max_block_size;    /**< The maximum number of samples in a block
+                                     (across channels.) Might be usefull for
+                                     data output buffer allocation. */
+    uint32_t min_frame_size;    /**< The minimum size in bytes of a frame. 0 if
+                                     unknow. */
+    uint32_t max_frame_size;    /**< The maximum size in bytes of a frame
+                                     (might be usefull for data input buffer
+                                     allocation.) 0 if unknow. */
+    uint32_t sample_rate;       /**< The sample rate of the stream. */
+    uint8_t nb_channels;        /**< The number of channels of the stream. */
+    uint8_t bits_per_sample;    /**< The number of bits used to represent a
+                                     sample. */
+#ifndef DISALLOW_64_BITS
+    uint64_t nb_samples;        /**< The number of encoded samples. 0 if
+                                     unknow. */
+#endif
+    uint8_t md5[16];            /**< The md5 of the original pcm */
 } stream_info_t;
-
-typedef struct {
-    /* The number of samples in the block encoded by this frame. */
-    uint16_t block_size;
-    /* How many channel there is and how channels are encoded. */
-    uint8_t channel_assignement;
-    /* The number of bits used to represent a sample. Should be the same than
-       in the stream info. */
-    uint8_t bits_per_sample;
-} frame_info_t;
-
-typedef struct {
-    /* Tell how the sample are encoded within the subframe. */
-    uint8_t type;
-    /* How many bits are waster per sample (not sure it is correctly
-       implemented for now but it is rare so whatever for now.) */
-    uint8_t wasted_bits_per_sample;
-} subframe_info_t;
-
 
 /**
  * Decode the flac metedata stream info and skip the others.
+ *
  * @param data_input  The metadata are read from there.
  * @param stream_info The resulting useful informations are put there.
+ *
  * @return Return 0 if successful, -1 else.
  */
 int decode_flac_metadata(data_input_t* data_input, stream_info_t* stream_info);
 
 /**
  * Decode flac stream into the output sink until the end is reached.
- * @param data_input  The stream is read from there.
- * @param data_output The decoded samples are outputed there.
- * @param stream_info Useful for the decoding frame headers.
- * @param output_per_sample Should the output done after each decoded frame.
+ *
+ * @param data_input      The stream is read from there.
+ * @param data_output     The decoded samples are outputed there.
+ * @param bits_per_sample Number of bits per sample coming from the stream info
+ *                        block.
+ * @param nb_channels     The number of channels coming from the stream info
+ *                        block.
+ *
  * @return Return 0 if successful, -1 else.
  */
-int decode_flac_data(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info, uint8_t output_per_sample);
+int decode_flac_data(data_input_t* data_input, data_output_t* data_output, uint8_t bits_per_sample, uint8_t nb_channels);
 
 #endif

@@ -28,8 +28,7 @@ and compare the md5 sums.
 
 You can play the outputed pcm with `aplay`. For flac encoded from a cd, you can
 type:  
-`$ ./bin/decode_flac_to_pcm --output-per-frame some_flac_file.flac |
-aplay -f cd -`
+`$ ./bin/decode_flac_to_pcm some_flac_file.flac | aplay -f cd -`
 
 Some options are available:  
 
@@ -49,6 +48,7 @@ options.
 - `--input-size bytes`: define the size of the input buffer. Should be greater 
 than 42.
 
-- `--output-per-frame`: dump the output buffer after each decoded frame and thus
-making the output buffer smaller.
+- `--max-output-size`: define the maximum size of the output buffer. It will be
+truncated to a multiple of the number of bits per sample times the number of
+channels.
 
