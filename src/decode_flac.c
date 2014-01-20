@@ -12,13 +12,93 @@
 
 #include "decode_flac.h"
 
+/**
+ * A linked list element for saving a previously decode value.
+ */
+typedef struct previous_value_t {
+    DECODE_TYPE value;
+    struct previous_value_t* next;
+} previous_value_t ;
+
+/**
+ * Represent the current state of rice code decoding.
+ */
+typedef struct {
+    uint8_t rice_parameter_size;    /**< The size of the rice code parameter (4
+                                         or 5 bits). */
+    uint8_t rice_parameter;         /**< The rice code parameter. */
+    uint8_t partition_order;        /**< The partition order of the rice coded
+                                         residuals. */
+    uint8_t is_first_partition;     /**< Is the current partition the first
+                                         one? */
+    uint8_t has_escape_code;        /**< Is the current partition an escaped
+                                         one? */
+    uint8_t escape_bits_per_sample; /**< Number of bits used for each escaped
+                                         residual. */
+    uint16_t remaining_nb_samples;  /**< The remaining number of samples to
+                                         return in the current partition. */
+} rice_coding_info_t;
+
+/**
+ * Represent a subframe currently being decode.
+ */
+typedef struct {
+    uint8_t type;                   /**< Tell how the sample are encoded within
+                                         the subframe. */
+    uint8_t wasted_bits_per_sample; /**< How many bits are wasted per sample. */
+    uint8_t bits_per_sample;        /**< How many bits are used per sample while
+                                         taking into account stereo encoding
+                                         (but not wasted bits). */
+
+    int data_input_position;    /**< If not -1, the current position in the
+                                     input stream for this subframe. */
+    uint8_t data_input_shift;   /**< The current shift in the input stream for
+                                     this subframe. */
+
+    DECODE_UTYPE value; /**< The value of a constant subframe or a previously
+                             decoded value of a verbatim subframe. */
+
+    previous_value_t previous_values[32];   /**< Linked list of previous values
+                                                 for fixed or lpc subframes. */
+    previous_value_t* next_out;             /**< The next value to be popped out
+                                                 of the linked list. */
+
+    uint8_t lpc_precision;  /**< The lpc's precision of a lpc subframe. */
+    int8_t lpc_shift;       /**< The lpc's shift of a lpc subframe. */
+    int16_t coeffs[32];     /**< The coefficients of a lpc subframe. */
+
+    rice_coding_info_t residual_info;   /**< The current state of decoding the
+                                             residual. */
+
+    uint8_t has_parameters; /**< Has the parameters fully read? */
+} subframe_info_t;
+
+typedef struct {
+    uint16_t block_size;            /**< The number of samples in the block
+                                         encoded by this frame. */
+    uint8_t channel_assignement;    /**< How many channel there is and how
+                                         channels are encoded. */
+    uint8_t nb_channels;            /**< The number of channels. */
+    uint8_t bits_per_sample;        /**< The number of bits used to represent a
+                                         sample. Should be the same than in the
+                                         stream info. */
+
+    #ifdef STEREO_ONLY
+    subframe_info_t subframes_info[2];  /**< The subframes of this frame. */
+    #else
+    subframe_info_t subframes_info[8];  /**< The subframes of this frame. */
+    #endif
+} frame_info_t;
+
 
 /**
  * Read some of the flac stream informations from data_input. The read
  * informations are used to fill the info paramater. Should be at the beginning
  * of the file.
+ *
  * @param data_input  The data input for reading the informations.
  * @param stream_info The resulting useful informations are put there.
+ *
  * @return Return 0 if successful, -1 else.
  */
 static int get_flac_stream_info(data_input_t* data_input, stream_info_t* stream_info) {
@@ -92,8 +172,10 @@ static int get_flac_stream_info(data_input_t* data_input, stream_info_t* stream_
 
 /**
  * Skip the unnecessary metadata stored in the flac stream.
+ *
  * @param input_data The metadata are read from there making the stream go to
  *                   the first frame.
+ *
  * @return Return 0 if successful, -1 else.
  */
 static int skip_metadata(data_input_t* data_input) {
@@ -139,15 +221,17 @@ static int skip_metadata(data_input_t* data_input) {
 
 /**
  * Read a frame header from the flac stream and retain useful informations.
- * @param data_input Frame header informations are read from there.
- * @param stream_info Frame header informations can depend of stream
- *                    informations (sample size & rate.)
- * @param frame_info  Frame header informations are put there.
+ *
+ * @param data_input      Frame header informations are read from there.
+ * @param bits_per_sample Number of bits per sample coming from the stream info
+ *                        block.
+ * @param frame_info      Frame header informations are put there.
+ *
  * @return Return 1 if successful, 0 if the previous frame was probably the
- *         last cause we hit an EOF or whatever else relevant in this case or
- *         -1 in case of unexpected error.
+ *         last because we hit an EOF or whatever else relevant in this case or
+ *         -1 in case of an unexpected error.
  */
-static int read_frame_header(data_input_t* data_input, stream_info_t* stream_info, frame_info_t* frame_info) {
+static int read_frame_header(data_input_t* data_input, uint8_t bits_per_sample, frame_info_t* frame_info) {
 
     uint8_t blocking_strategy = 0;
     uint8_t sample_rate = 0;
@@ -165,21 +249,8 @@ static int read_frame_header(data_input_t* data_input, stream_info_t* stream_inf
     buffer = data_input->buffer;
     position = data_input->position;
 
-    if((buffer[position] != 0xFF) || (buffer[position + 1] != 0xF8)) {
-        uint16_t i = position;
-        fprintf(stderr, "Something is wrong with the synchro\n");
-        for(; i < (data_input->read_size - 1); ++i)
-            if((buffer[position] == 0xFF) && (buffer[position + 1] == 0xF8)) {
-                fprintf(stderr, "It was there %u when you looked there %u\n", i, position);
-                return -1;
-            }
-
-        for(i = 0; i < position; ++i)
-            if((buffer[position] == 0xFF) && (buffer[position + 1] == 0xF8)) {
-                fprintf(stderr, "It was there %u when you looked there %u\n", i, position);
-                return -1;
-            }
-
+    if((buffer[position] != 0xFF) || ((buffer[position + 1] & 0xFC) != 0xF8)) {
+        fprintf(stderr, "Something is wrong with the synchro.\n");
         return -1;
     }
 
@@ -195,7 +266,7 @@ static int read_frame_header(data_input_t* data_input, stream_info_t* stream_inf
     position += 1;
 
     if(frame_info->bits_per_sample == 0) {
-        frame_info->bits_per_sample = stream_info->bits_per_sample;
+        frame_info->bits_per_sample = bits_per_sample;
     } else {
         switch(frame_info->bits_per_sample) {
             case 1:
@@ -375,8 +446,10 @@ static int read_frame_header(data_input_t* data_input, stream_info_t* stream_inf
 /**
  * Read a subframe header mainly to get its type and the number of wasted bits
  * per sample if any.
+ *
  * @param data_input    Subframe header informations are read from there.
  * @param subframe_info Subframe header informations are put there.
+ *
  * @return Return 0 if successful, -1 else.
  */
 static int read_subframe_header(data_input_t* data_input, subframe_info_t* subframe_info) {
@@ -415,26 +488,21 @@ static int read_subframe_header(data_input_t* data_input, subframe_info_t* subfr
 /**
  * Get the next residual coded using Rice codes from the flac stream and return
  * it. Residuals are coded using two Rice codes kind which differ by their
- * parameter size. This function is not reentrant so by careful~
- * @param data_input          Needed data are fetched from there.
- * @param partition_order     Used to compute the number of samples coded in
- *                            each partitions.
- * @param is_first_partition  Indicate if we are in the first partition or not.
- *                            Used to compute the number of samples which
- *                            differ if we are in the first partition.
- * @param rice_parameter_size Can be equal to 4 or 5 which is the number of
- *                            bits making of the rice parameter.
- * @param block_size          The number of sample in a block for the current
- *                            frame.
- * @param predictor_order     Used to compute the number of partitions and thus
- *                            the number of samples per partition.
- * @param error_code          Like its name indicates, it is used to tell the
- *                            caller if an error occured or not. If equal to
- *                            -1, yes else no.
+ * parameter size.
+ *
+ * @param data_input      Needed data are fetched from there.
+ * @param residual_info   Retain the information about the currently decoded
+ *                        residuals across calls to this function.
+ * @param predictor_order Used to compute the number of partitions and thus the
+ *                        number of samples per partition.
+ * @param error_code      Like its name indicates, it is used to tell the caller
+ *                        if an error occured or not. If equal to -1, yes else
+ *                        no.
+ *
  * @return Return the decoded residual.
  */
 
-static DECODE_TYPE get_next_rice_residual(data_input_t* data_input, struct rice_coding_info_t* residual_info, uint16_t block_size, uint8_t predictor_order, int* error_code) {
+static DECODE_TYPE get_next_rice_residual(data_input_t* data_input, rice_coding_info_t* residual_info, uint16_t block_size, uint8_t predictor_order, int* error_code) {
 
     static uint16_t nb_partitions[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768};
     DECODE_TYPE value = 0;
@@ -501,15 +569,20 @@ static DECODE_TYPE get_next_rice_residual(data_input_t* data_input, struct rice_
 /**
  * Decode a constant subframe into the data output sink. A constant subframe
  * is a value repeated a number of time equivalent to the associeted number of
- * samples. Usefull for silent in track and enraging ghost tracks.
- * @param data_input The value is read from there.
- * @param data_output     The resulting sample are sent there.
- * @param frame_info      Used to know the number of samples or the current
- *                        channel assignement.
- * @param bits_per_sample The number of bits per sample used in this subframe.
- * @param channel_nb      Indicate which channel in the channel assignement we
- *                        are currently outputing.
- * @return Return 0 if successful, -1 else. 
+ * samples. Usefull for silent in track and enraging ghost tracks leading.
+ *
+ * @param data_input  The value is read from there.
+ * @param data_output The resulting samples are sent there.
+ * @param frame_info  Used to know the number of samples, the current channel
+ *                    assignement or the subframe information.
+ * @param channel_nb  Indicate which channel in the channel assignement we are
+ *                    currently outputing.
+ * @param crt_sample  The number of sample already decoded by a call to this
+ *                    function for the current subframe (warmup samples
+ *                    included).
+ * @param error_code  -1 if an error occured, 0 else.
+ *
+ * @return Return the number of outputed samples for the current subframe.
  */
 static uint16_t decode_constant(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
@@ -528,9 +601,9 @@ static uint16_t decode_constant(data_input_t* data_input, data_output_t* data_ou
             return 0;
 
         if(*error_code == 0) {
-            if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
-                frame_info->subframes_info[channel_nb].data_input_position = 0; /* We don't care about the position since everything was already read. */
-                frame_info->subframes_info[channel_nb].data_input_shift = 0;
+            if(frame_info->subframes_info[channel_nb].data_input_position == -1) {
+                frame_info->subframes_info[channel_nb].data_input_position = get_position(data_input);
+                frame_info->subframes_info[channel_nb].data_input_shift = data_input->shift;
             }
             return crt_sample;
         }
@@ -544,14 +617,19 @@ static uint16_t decode_constant(data_input_t* data_input, data_output_t* data_ou
 /**
  * Decode a verbatim subframe into the data output sink. A verbatim subframe
  * is a sequence of raw samples like white noise and whatever random stuff.
- * @param data_input      Samples are read from there.
- * @param data_output     The resulting samples are outputed there.
- * @param frame_info      Provide usefull informations like the number of samples.
- * @param bits_per_sample How many bits make up a sample for the current
- *                        subframe and channel.
- * @param channel_nb      Indicate which channel in the channel assignement we
- *                        are currently outputing.
- * @return Return 0 if successful, -1 else.
+ *
+ * @param data_input  Samples are read from there.
+ * @param data_output The resulting samples are outputed there.
+ * @param frame_info  Provide usefull informations like the number of samples
+ *                    and information on the subframe.
+ * @param channel_nb  Indicate which channel in the channel assignement we are
+ *                    currently outputing.
+ * @param crt_sample  The number of sample already decoded by a call to this
+ *                    function for the current subframe (warmup samples
+ *                    included).
+ * @param error_code  -1 if an error occured, 0 else.
+ *
+ * @return Return the number of outputed samples for the current subframe.
  */
 static uint16_t decode_verbatim(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
@@ -592,22 +670,22 @@ static uint16_t decode_verbatim(data_input_t* data_input, data_output_t* data_ou
 }
 
 
-
-
-
 /**
  * Decode a fixed subframe into the data output sink. In a fixed subframe,
  * samples are encoded using a fixed linear predictor of zero to fourth order.
- * @param data_input      Warm-up samples and residuals are read from there.
- * @param data_output     The decoded samples are outputed there.
- * @param frame_info      Provide usefull information like the number of samples.
- * @param subframe_info   Provide information about the fixed subframe being
- *                        decoded.
- * @param bits_per_sample How many bits make up a sample for the current
- *                        subframe and channel.
- * @param channel_nb      Indicate which channel in the channel assignement we
- *                        are currently outputing.
- * @return Return 0 if successful, -1 else.
+ *
+ * @param data_input  Warm-up samples and residuals are read from there.
+ * @param data_output The decoded samples are outputed there.
+ * @param frame_info  Provide usefull information like the number of samples and
+ *                    information on the subframe.
+ * @param channel_nb  Indicate which channel in the channel assignement we are
+ *                    currently outputing.
+ * @param crt_sample  The number of sample already decoded by a call to this
+ *                    function for the current subframe (warmup samples
+ *                    included).
+ * @param error_code  -1 if an error occured, 0 else.
+ *
+ * @return Return the number of outputed samples for the current subframe.
  */
 static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
@@ -668,7 +746,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
 
                 if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
                     uint16_t crt_skipped_sample = crt_sample + 1;
-                    struct rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
+                    rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
                     for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) {
                         get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
                         if(*error_code == -1)
@@ -745,7 +823,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
 
                 if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
                     uint16_t crt_skipped_sample = crt_sample + 1;
-                    struct rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
+                    rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
                     for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) {
                         get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
                         if(*error_code == -1)
@@ -815,7 +893,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
 
                     if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
                         uint16_t crt_skipped_sample = order;
-                        struct rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
+                        rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
                         for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) {
                             get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
                             if(*error_code == -1)
@@ -864,7 +942,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
 
                 if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
                     uint16_t crt_skipped_sample = crt_sample + 1;
-                    struct rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
+                    rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
                     for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) {
                         get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
                         if(*error_code == -1)
@@ -886,18 +964,20 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
 /**
  * Decode a LPC subframe into the data output sink. In a LPC subframe, samples
  * are encoded using FIR linear prediction of one to thirty-second order.
- * @param data_input      Parameters, warm-up samples and residuals are read
- *                        from there.
- * @param data_output     The decoded samples are outputed there.
- * @param frame_info      Provide usefull informations like the number of
- *                        samples.
- * @param subframe_info   Provide information about the fixed subframe being
- *                        decoded.
- * @param bits_per_sample How many bits make up a sample for the current
- *                        subframe and channel.
- * @param channel_nb      Indicate which channel in the channel assignement we
- *                        are currently outputing.
- * @return Return 0 if successful, -1 else.
+ *
+ * @param data_input  Parameters, warm-up samples and residuals are read from
+ *                    there.
+ * @param data_output The decoded samples are outputed there.
+ * @param frame_info  Provide usefull informations like the number of samples
+ *                    and information on the subframe.
+ * @param channel_nb  Indicate which channel in the channel assignement we are
+ *                    currently outputing.
+ * @param crt_sample  The number of sample already decoded by a call to this
+ *                    function for the current subframe (warmup samples
+ *                    included).
+ * @param error_code  -1 if an error occured, 0 else.
+ *
+ * @return Return the number of outputed samples for the current subframe.
  */
 static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
@@ -973,7 +1053,7 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
 
                 if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
                     uint16_t crt_skipped_sample = order;
-                    struct rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
+                    rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
                     for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) {
                         get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
                         if(*error_code == -1)
@@ -1021,7 +1101,7 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
 
                 if(((channel_nb + 1) < frame_info->nb_channels)  && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
                     uint16_t crt_skipped_sample = crt_sample + 1;
-                    struct rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
+                    rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
                     for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) {
                         get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
                         if(*error_code == -1)
@@ -1037,7 +1117,7 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
         for(; crt_sample < frame_info->block_size; ++crt_sample) {
             uint8_t i = 0;
             DECODE_TYPE value = 0;
-            struct previous_value_t* crt = frame_info->subframes_info[channel_nb].next_out;
+            previous_value_t* crt = frame_info->subframes_info[channel_nb].next_out;
 
             for(; i < order; ++i) {
                 value += frame_info->subframes_info[channel_nb].coeffs[order - i - 1]
@@ -1070,7 +1150,7 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
 
                 if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
                     uint16_t crt_skipped_sample = crt_sample + 1;
-                    struct rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
+                    rice_coding_info_t residual_info = frame_info->subframes_info[channel_nb].residual_info; 
                     for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) {
                         get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
                         if(*error_code == -1)
@@ -1092,15 +1172,20 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
 /**
  * Decode a subframe into the data output sink. A subframe can be constant,
  * verbatim, fixed or LPC.
- * @param data_input    Parameters, warm-up samples and residuals are read from
- *                      there.
- * @param data_output   The decoded samples are outputed there.
- * @param frame_info    Provide usefull informations like the number of
- *                      samples.
- * @param subframe_info Provide the type of subframe to decode.
- * @param channel_nb    Indicate which channel in the channel assignement we
- *                      are currently outputing.
- * @return Return 0 if successful, -1 else.
+ *
+ * @param data_input  Parameters, warm-up samples and residuals are read from
+ *                    there.
+ * @param data_output The decoded samples are outputed there.
+ * @param frame_info  Provide usefull informations like the number of
+ *                    samples and information on the subframe.
+ * @param channel_nb  Indicate which channel in the channel assignement we
+ *                    are currently outputing.
+ * @param crt_sample  The number of sample already decoded by a call to this
+ *                    function for the current subframe (warmup samples
+ *                    included).
+ * @param error_code  -1 if an error occured, 0 else.
+ *
+ * @return Return the number of outputed samples for the current subframe.
  */
 static uint16_t decode_subframe_data(data_input_t* data_input, data_output_t* data_output, frame_info_t* frame_info, uint8_t channel_nb, uint16_t crt_sample, int* error_code) {
 
@@ -1120,22 +1205,25 @@ static uint16_t decode_subframe_data(data_input_t* data_input, data_output_t* da
 
 }
 
-//static uint32_t frame_nb = 0;
-
 
 /**
- * Decode and entire frame and send the decoded samples to the output sink.
- * The decoded frame consists of a frame header and one or more couple of
- * subframe headers and data.
- * @param data_input  Parameters, warm-up samples and residuals are read from
- *                    there.
- * @param data_output The decoded samples are outputed there.
- * @param stream_info Useful for the decoding the frame header.
+ * Decode an entire frame and send the decoded samples to the output sink when
+ * the output buffer is full. The decoded frame consists of a frame header and
+ * one or more couple of subframe headers and data.
+ *
+ * @param data_input      Parameters, warm-up samples and residuals are read
+ *                        from there.
+ * @param data_output     The decoded samples are outputed there.
+ * @param bits_per_sample Number of bits per sample coming from the stream info
+ *                        block.
+ * @param nb_channels     The number of channels coming from the stream info
+ *                        block.
+ *
  * @return Return 1 if successful, 0 if the previous frame was probably the
- *         last cause we hit an EOF or whatever else relevant in this case or
- *         -1 in case of unexpected error.
+ *         last because we hit an EOF or whatever else relevant in this case or
+ *         -1 in case of an unexpected error.
  */
-static int decode_frame(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info) {
+static int decode_frame(data_input_t* data_input, data_output_t* data_output, uint8_t bits_per_sample, uint8_t nb_channels) {
 
     int error_code = 0;
     uint8_t channel_nb = 0;
@@ -1147,10 +1235,8 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
     #endif
     uint16_t nb_read_samples = 0;
 
-//    fprintf(stderr, "frame nb: %u\n", frame_nb++);
-
-    frame_info.nb_channels = stream_info->nb_channels;
-    error_code = read_frame_header(data_input, stream_info, &frame_info);
+    frame_info.nb_channels = nb_channels;
+    error_code = read_frame_header(data_input, bits_per_sample, &frame_info);
     if(error_code == -1)
         return -1;
     if(error_code == 0)
@@ -1164,7 +1250,7 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
     #endif
 
     /* Initialize some per subframe values */
-    for(; channel_nb < stream_info->nb_channels; ++channel_nb) {
+    for(; channel_nb < nb_channels; ++channel_nb) {
         frame_info.subframes_info[channel_nb].has_parameters = 0;
         frame_info.subframes_info[channel_nb].data_input_position = -1;
     }
@@ -1176,7 +1262,7 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
         data_output->starting_position = data_output->position;
         data_output->starting_shift = data_output->shift;
 
-        for(channel_nb = 0; channel_nb < stream_info->nb_channels; ++channel_nb) {
+        for(channel_nb = 0; channel_nb < nb_channels; ++channel_nb) {
             /* If it is the first time decoding the subframe, we read its header. */
             if(crt_samples[channel_nb] == 0) {
                 if(read_subframe_header(data_input, frame_info.subframes_info + channel_nb) == -1)
@@ -1199,7 +1285,7 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
                 return -1;
 
             /* We change the position in the output buffer for the next channel (if any). */
-            if((channel_nb + 1) < stream_info->nb_channels) {
+            if((channel_nb + 1) < nb_channels) {
                 switch(frame_info.bits_per_sample) {
 #ifdef DECODE_8_BITS 
                     case 8:
@@ -1249,7 +1335,7 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
         /* Number of read samples since the last iteration (if any). */
         nb_read_samples = crt_samples[0] - nb_read_samples;
 
-        nb_bits_to_write = nb_read_samples * stream_info->nb_channels * frame_info.bits_per_sample + data_output->starting_shift;
+        nb_bits_to_write = nb_read_samples * nb_channels * frame_info.bits_per_sample + data_output->starting_shift;
         nb_bytes_to_write = nb_bits_to_write / 8;
         dump_buffer(data_output, nb_bytes_to_write);
 
@@ -1262,6 +1348,13 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
             data_output->shift = 0;
         }
     } while(crt_samples[0] < frame_info.block_size);
+
+    /** If the last subframe is a constant one and a position was saved, we skip to it. */
+    if((frame_info.subframes_info[channel_nb - 1].type == SUBFRAME_CONSTANT) && (frame_info.subframes_info[channel_nb - 1].data_input_position != -1)) {
+        if(skip_to_position(data_input, frame_info.subframes_info[channel_nb - 1].data_input_position) == -1)
+            return -1;
+        data_input->shift = frame_info.subframes_info[channel_nb - 1].data_input_shift;
+    }
 
     if(data_input->shift != 0) {
         data_input->shift = 0;
@@ -1280,8 +1373,10 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, st
 
 /**
  * Decode the flac metedata stream info and skip the others.
+ *
  * @param data_input  The metadata are read from there.
  * @param stream_info The resulting useful informations are put there.
+ *
  * @return Return 0 if successful, -1 else.
  */
 int decode_flac_metadata(data_input_t* data_input, stream_info_t* stream_info) {
@@ -1299,16 +1394,21 @@ int decode_flac_metadata(data_input_t* data_input, stream_info_t* stream_info) {
 
 /**
  * Decode flac stream into the output sink until the end is reached.
- * @param data_input  The stream is read from there.
- * @param data_output The decoded samples are outputed there.
- * @param stream_info Useful for the decoding frame headers.
+ *
+ * @param data_input      The stream is read from there.
+ * @param data_output     The decoded samples are outputed there.
+ * @param bits_per_sample Number of bits per sample coming from the stream info
+ *                        block.
+ * @param nb_channels     The number of channels coming from the stream info
+ *                        block.
+ *
  * @return Return 0 if successful, -1 else.
  */
-int decode_flac_data(data_input_t* data_input, data_output_t* data_output, stream_info_t* stream_info) {
+int decode_flac_data(data_input_t* data_input, data_output_t* data_output, uint8_t bits_per_sample, uint8_t nb_channels) {
 
     int error_code = 0;
 
-    while((error_code = decode_frame(data_input, data_output, stream_info)) > 0);
+    while((error_code = decode_frame(data_input, data_output, bits_per_sample, nb_channels)) > 0);
 
     if(error_code == -1)
         return -1;

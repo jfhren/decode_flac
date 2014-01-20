@@ -17,8 +17,10 @@
  * We suppose that if value represent a signed integer then it is using two's
  * complement representation.  For now, we just fill the whole most significant
  * (64 - size) bis with 1 if the size-th bit is one.
+ *
  * @param value The value to convert.
  * @param size The number of bits making up the value.
+ *
  * @return Return the converted value as a signed one on 64 bits.
  */
 DECODE_TYPE convert_to_signed(DECODE_UTYPE value, uint8_t size) {
@@ -39,9 +41,11 @@ DECODE_TYPE convert_to_signed(DECODE_UTYPE value, uint8_t size) {
 /**
  * Dump nb_bytes bytes from the output buffer to the output file descriptor
  * starting from 0. Nothing is modified within the data_output structure.
+ *
  * @param data_output The output buffer and the output file descriptor are
  *                    there.
  * @param nb_bytes    The number of bytes to dump from the output buffer.
+ *
  * @return Return 0 if successful, -1 else.
  */
 int dump_buffer(data_output_t* data_output, int nb_bytes) {
@@ -64,13 +68,12 @@ int dump_buffer(data_output_t* data_output, int nb_bytes) {
 
 }
 
-static uint32_t nb_bytes = 0;
-
 
 /**
- * Output a sample while taking care of its size, channel number and channel
- * assignement.  The output buffer should be of the right size (or at least
- * bigger than necessary.)
+ * Output a sample while taking care of its size, channel number, channel
+ * assignement and buffer remaining space. A sample is not added to the buffer
+ * if there is not enough space for it whole.
+ *
  * @param data_output         The output buffer is there.
  * @param sample              The sample to output.
  * @param sample_size         The sample size in bits.
@@ -78,7 +81,10 @@ static uint32_t nb_bytes = 0;
  *                            stereo, whatever...) @param channel_nb The channel
  *                            number of this sample w.r.t. the channel
  *                            assignement.
- * @return Return 0 if successful, -1 else.
+ * @param channel_nb          The channel number to which appertains the sample.
+ *
+ * @return Return 1 if successful, 0 if the sample could not be put in the
+ *         buffer, -1 else.
  */
 int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sample_size, uint8_t channel_assignement, uint8_t channel_nb) {
 
@@ -98,8 +104,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
     if((position + (sample_size / 8)) > (uint32_t)data_output->write_size)
         return 0;
 #endif
-
-    nb_bytes += (sample_size / 8);
 
     switch(channel_assignement) {
         case LEFT_SIDE:
