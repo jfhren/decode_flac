@@ -202,7 +202,7 @@ int refill_input_buffer(data_input_t* data_input) {
 #ifdef DISALLOW_64_BITS
 uint32_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int* error_code) {
 
-    uint64_t value = 0;
+    uint32_t value = 0;
 #else
 uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int* error_code) {
 
@@ -237,7 +237,7 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
     position = data_input->position;
     shift = data_input->shift;
 
-    if(shift == 0) {
+    if((shift == 0) && ((requested_size % 8) == 0)) {
         switch(requested_size) {
             case 8:
                 return buffer[data_input->position++];
@@ -259,22 +259,22 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
 
 #ifndef DISALLOW_64_BITS
             case 40:
-                value = ((int64_t)buffer[position] << 32) | (buffer[position + 1] << 24) | (buffer[position + 2] << 16) | (buffer[position + 3] << 8) | buffer[position + 4];
+                value = ((uint64_t)buffer[position] << 32) | (buffer[position + 1] << 24) | (buffer[position + 2] << 16) | (buffer[position + 3] << 8) | buffer[position + 4];
                 data_input->position += 5;
                 return value;
 
             case 48:
-                value = ((int64_t)buffer[position] << 40) | ((int64_t)buffer[position + 1] << 32) | (buffer[position + 2] << 24) | (buffer[position + 3] << 16) | (buffer[position + 4] << 8) | buffer[position + 5];
+                value = ((uint64_t)buffer[position] << 40) | ((uint64_t)buffer[position + 1] << 32) | (buffer[position + 2] << 24) | (buffer[position + 3] << 16) | (buffer[position + 4] << 8) | buffer[position + 5];
                 data_input->position += 6;
                 return value;
 
             case 56:
-                value = ((int64_t)buffer[position] << 48) | ((int64_t)buffer[position + 1] << 40) | ((int64_t)buffer[position + 2] << 32) | (buffer[position + 3] << 24) | (buffer[position + 4] << 16) | (buffer[position + 5] << 8) | buffer[position + 6];
+                value = ((uint64_t)buffer[position] << 48) | ((uint64_t)buffer[position + 1] << 40) | ((uint64_t)buffer[position + 2] << 32) | (buffer[position + 3] << 24) | (buffer[position + 4] << 16) | (buffer[position + 5] << 8) | buffer[position + 6];
                 data_input->position += 7;
                 return value;
 
             case 64:
-                value = ((int64_t)buffer[position] << 56) | ((int64_t)buffer[position + 1] << 48) | ((int64_t)buffer[position + 2] << 40) | ((int64_t)buffer[position + 3] << 32) | (buffer[position + 4] << 24) | (buffer[position + 5] << 16) | (buffer[position + 6] << 8) | buffer[position + 7];
+                value = ((uint64_t)buffer[position] << 56) | ((uint64_t)buffer[position + 1] << 48) | ((uint64_t)buffer[position + 2] << 40) | ((uint64_t)buffer[position + 3] << 32) | (buffer[position + 4] << 24) | (buffer[position + 5] << 16) | (buffer[position + 6] << 8) | buffer[position + 7];
                 data_input->position += 8;
                 return value;
 #endif
@@ -284,38 +284,46 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
     if(nb_needed_bits < 8) {
         value = ((buffer[position] & (0xFF >> shift)) >> (8 - nb_needed_bits));
         data_input->shift += requested_size;
+        return value;
     } else if(nb_needed_bits < 16) {
         value = ((buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] >> (16 - nb_needed_bits));
         data_input->position +=1;
         data_input->shift = nb_needed_bits - 8;
+        return value;
     } else if(nb_needed_bits < 24) {
         value = ((buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] >> (24 - nb_needed_bits));
         data_input->position += 2;
         data_input->shift = nb_needed_bits - 16;
+        return value;
     } else if(nb_needed_bits < 32) {
         value = ((buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] >> (32 - nb_needed_bits));
         data_input->position += 3;
         data_input->shift = nb_needed_bits - 24;
+        return value;
     }
 #ifndef DISALLOW_64_BITS
      else if(nb_needed_bits < 40) {
-        value = ((int64_t)(buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] >> (40 - nb_needed_bits));
+        value = ((uint64_t)(buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] >> (40 - nb_needed_bits));
         data_input->position += 4;
         data_input->shift = nb_needed_bits - 32;
+        return value;
     } else if(nb_needed_bits < 48) {
-        value = ((int64_t)(buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | ((int64_t)buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] >> (48 - nb_needed_bits));
+        value = ((uint64_t)(buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | ((uint64_t)buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] >> (48 - nb_needed_bits));
         data_input->position += 5;
         data_input->shift = nb_needed_bits - 40;
+        return value;
     } else if(nb_needed_bits < 56) {
-        value = ((int64_t)(buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | ((int64_t)buffer[position + 1] << (nb_needed_bits - 16)) | ((int64_t)buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] << (nb_needed_bits - 48)) | (buffer[position + 6] >> (56 - nb_needed_bits));
+        value = ((uint64_t)(buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | ((uint64_t)buffer[position + 1] << (nb_needed_bits - 16)) | ((uint64_t)buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] << (nb_needed_bits - 48)) | (buffer[position + 6] >> (56 - nb_needed_bits));
         data_input->position += 6;
         data_input->shift = nb_needed_bits - 48;
+        return value;
     } else if(nb_needed_bits < 64) {
-        value = ((int64_t)(buffer[position] & (0xFF >> shift))  << (nb_needed_bits - 8)) | ((int64_t)buffer[position + 1] << (nb_needed_bits - 16)) | ((int64_t)buffer[position + 2] << (nb_needed_bits - 24)) | ((int64_t)buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] << (nb_needed_bits - 48)) | (buffer[position + 6] << (nb_needed_bits - 56)) | (buffer[position + 7] >> (64 - nb_needed_bits));
+        value = ((uint64_t)(buffer[position] & (0xFF >> shift))  << (nb_needed_bits - 8)) | ((uint64_t)buffer[position + 1] << (nb_needed_bits - 16)) | ((uint64_t)buffer[position + 2] << (nb_needed_bits - 24)) | ((uint64_t)buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] << (nb_needed_bits - 48)) | (buffer[position + 6] << (nb_needed_bits - 56)) | (buffer[position + 7] >> (64 - nb_needed_bits));
         data_input->position += 7;
         data_input->shift = nb_needed_bits - 56;
+        return value;
     } else if(nb_needed_bits < 72) {
-        value = ((int64_t)(buffer[position] & (0xFF >> shift))  << (nb_needed_bits - 8)) | ((int64_t)buffer[position + 1] << (nb_needed_bits - 16)) | ((int64_t)buffer[position + 2] << (nb_needed_bits - 24)) | ((int64_t)buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] << (nb_needed_bits - 48)) | (buffer[position + 6] << (nb_needed_bits - 56)) | (buffer[position + 7] << (nb_needed_bits - 64)) | (buffer[position + 8] >> (72 - nb_needed_bits));
+        value = ((uint64_t)(buffer[position] & (0xFF >> shift))  << (nb_needed_bits - 8)) | ((uint64_t)buffer[position + 1] << (nb_needed_bits - 16)) | ((uint64_t)buffer[position + 2] << (nb_needed_bits - 24)) | ((uint64_t)buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] << (nb_needed_bits - 48)) | (buffer[position + 6] << (nb_needed_bits - 56)) | (buffer[position + 7] << (nb_needed_bits - 64)) | (buffer[position + 8] >> (72 - nb_needed_bits));
         data_input->position += 8;
         data_input->shift = nb_needed_bits - 64;
     }
