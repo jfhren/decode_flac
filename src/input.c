@@ -22,7 +22,7 @@
  * @return Return the position.
  */
 int get_position(data_input_t* data_input) {
-    return lseek(data_input->fd, 0, SEEK_CUR) - (data_input->read_size - data_input->position);
+    return lseek(data_input->fd, 0, SEEK_CUR) - data_input->read_size + data_input->position;
 }
 
 

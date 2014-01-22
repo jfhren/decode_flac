@@ -455,30 +455,19 @@ static int read_frame_header(data_input_t* data_input, uint8_t bits_per_sample, 
 static int read_subframe_header(data_input_t* data_input, subframe_info_t* subframe_info) {
 
     int error_code = 0;
-    uint8_t tmp = get_shifted_bits(data_input, 8, &error_code);
-    subframe_info->type = (tmp >> 1) & 0x3F;
-    subframe_info->wasted_bits_per_sample = tmp & 0x01;
+    uint8_t partial_subframe_header_data = get_shifted_bits(data_input, 8, &error_code);
+    if(error_code == -1)
+        return -1;
 
-    if(subframe_info->wasted_bits_per_sample) {
-        uint8_t current_shift = data_input->shift;
+    subframe_info->type = (partial_subframe_header_data >> 1) & 0x3F;
+    subframe_info->wasted_bits_per_sample = partial_subframe_header_data & 0x01;
 
-        while(((data_input->buffer[data_input->position] & (0x80 >> current_shift)) >> (7 - current_shift)) != 1) {
-            ++current_shift;
+    if(subframe_info->wasted_bits_per_sample)
+        while(get_shifted_bits(data_input, 1, &error_code) == 0) {
+            if(error_code == -1)
+                return -1;
             ++subframe_info->wasted_bits_per_sample;
-
-            if(current_shift == 8) {
-                current_shift = 0;
-                data_input->position += 1;
-
-                if(should_refill_input_buffer(data_input, 1)) {
-                    if(refill_input_buffer_at_least(data_input, 1)  == -1)
-                        return -1;
-                }
-            }
         }
-
-        data_input->shift = (data_input->shift + subframe_info->wasted_bits_per_sample) % 8;
-    }
 
     return 0;
 
