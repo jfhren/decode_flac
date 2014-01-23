@@ -88,6 +88,17 @@ int refill_input_buffer_at_least(data_input_t* data_input, int nb_needed_bytes);
 int refill_input_buffer(data_input_t* data_input);
 
 /**
+ * Return one shifted bit from the input stream. Useful for rice coding and
+ * subframe header decoding
+ *
+ * @param data_input     Bits and bytes are read from there.
+ * @param error_code     If any error occurs, it will be equal to -1.
+ *
+ * @return Return the requested bit.
+ */
+uint8_t get_one_shifted_bit(data_input_t* data_input, int* error_code);
+
+/**
  * Get bits from the input taking into shift in byte.
  *
  * @param data_input     Bits and bytes are read from there.

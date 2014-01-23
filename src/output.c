@@ -94,14 +94,14 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
     uint8_t shift = data_output->shift;
 
     if((((channel_assignement == LEFT_SIDE) || (channel_assignement == MID_SIDE)) && (channel_nb == 1)) || ((channel_assignement == RIGHT_SIDE) && (channel_nb == 0))) {
-        if(((position * 8) + shift + sample_size - 1) > ((uint32_t)(data_output->write_size * 8)))
+        if(((position << 3) + shift + sample_size - 1) > ((uint32_t)(data_output->write_size << 3)))
             return 0;
     } else {
-        if(((position * 8) + shift + sample_size) > ((uint32_t)(data_output->write_size * 8)))
+        if(((position << 3) + shift + sample_size) > ((uint32_t)(data_output->write_size << 3)))
             return 0;
     }
 #else
-    if((position + (sample_size / 8)) > (uint32_t)data_output->write_size)
+    if((position + (sample_size >> 3)) > (uint32_t)data_output->write_size)
         return 0;
 #endif
 
@@ -109,38 +109,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
         case LEFT_SIDE:
             if(channel_nb == 0) {
                 switch(sample_size) {
-#ifdef DECODE_16_BITS
-                    case 16:
-                        if(!data_output->is_signed)
-                            sample = (DECODE_UTYPE)(convert_to_signed(sample, 16) + 32768);
-
-                        if(data_output->is_little_endian) {
-                            buffer[position] = sample & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                        } else {
-                            buffer[position] = (sample >> 8) & 0xFF;
-                            buffer[position + 1] = sample & 0xFF;
-                        }
-                        data_output->position += 4;
-                        return 1;
-#endif
-#ifdef DECODE_24_BITS
-                    case 24:
-                        if(!data_output->is_signed)
-                            sample = (DECODE_UTYPE)(convert_to_signed(sample, 24) + 8388608);
-
-                        if(data_output->is_little_endian) {
-                            buffer[position] = sample & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                            buffer[position + 2] = (sample >> 16) & 0xFF;
-                        } else {
-                            buffer[position] = (sample >> 16) & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                            buffer[position + 2] = sample & 0xFF;
-                        }
-                        data_output->position += 6;
-                        return 1;
-#endif
 #ifdef DECODE_8_BITS
                     case 8:
                         if(!data_output->is_signed)
@@ -165,6 +133,21 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                         data_output->position += 3;
                         return 1;
 #endif
+#ifdef DECODE_16_BITS
+                    case 16:
+                        if(!data_output->is_signed)
+                            sample = (DECODE_UTYPE)(convert_to_signed(sample, 16) + 32768);
+
+                        if(data_output->is_little_endian) {
+                            buffer[position] = sample & 0xFF;
+                            buffer[position + 1] = (sample >> 8) & 0xFF;
+                        } else {
+                            buffer[position] = (sample >> 8) & 0xFF;
+                            buffer[position + 1] = sample & 0xFF;
+                        }
+                        data_output->position += 4;
+                        return 1;
+#endif
 #ifdef DECODE_20_BITS
                     case 20:
                         if(!data_output->is_signed)
@@ -180,6 +163,23 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                             buffer[position + 2] = (sample << 4) & 0xF0;
                         }
                         data_output->position += 5;
+                        return 1;
+#endif
+#ifdef DECODE_24_BITS
+                    case 24:
+                        if(!data_output->is_signed)
+                            sample = (DECODE_UTYPE)(convert_to_signed(sample, 24) + 8388608);
+
+                        if(data_output->is_little_endian) {
+                            buffer[position] = sample & 0xFF;
+                            buffer[position + 1] = (sample >> 8) & 0xFF;
+                            buffer[position + 2] = (sample >> 16) & 0xFF;
+                        } else {
+                            buffer[position] = (sample >> 16) & 0xFF;
+                            buffer[position + 1] = (sample >> 8) & 0xFF;
+                            buffer[position + 2] = sample & 0xFF;
+                        }
+                        data_output->position += 6;
                         return 1;
 #endif
 #ifdef DECODE_32_BITS
@@ -210,48 +210,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                 DECODE_UTYPE uright = 0;
 
                 switch(sample_size) {
-#ifdef DECODE_16_BITS
-                    case 17:
-                        if(data_output->is_little_endian) {
-                            uleft = (buffer[position - 1] << 8) | buffer[position - 2];
-                            left = convert_to_signed(uleft, 16);
-                            uright = (DECODE_UTYPE)(left - convert_to_signed(sample, 17));
-
-                            buffer[position] = uright & 0xFF;
-                            buffer[position + 1] = (uright >> 8) & 0xFF;
-                        } else {
-                            uleft = (buffer[position - 2] << 8) | buffer[position - 1];
-                            left = convert_to_signed(uleft, 16);
-                            uright = (DECODE_UTYPE)(left - convert_to_signed(sample, 17));
-
-                            buffer[position] = (uright >> 8) & 0xFF;
-                            buffer[position + 1] = uright & 0xFF;
-                        }
-                        data_output->position += 4;
-                        return 1;
-#endif
-#ifdef DECODE_24_BITS
-                    case 25:
-                        if(data_output->is_little_endian) {
-                            uleft = (buffer[position - 1] << 16) | (buffer[position - 2] << 8) | buffer[position - 3];
-                            left = convert_to_signed(uleft, 24);
-                            uright = (DECODE_UTYPE)(left - convert_to_signed(sample, 25));
-
-                            buffer[position] = uright & 0xFF;
-                            buffer[position + 1] = (uright >> 8) & 0xFF;
-                            buffer[position + 2] = (uright >> 16) & 0xFF;
-                        } else {
-                            uleft = (buffer[position - 3] << 16) | (buffer[position - 2] << 8) | buffer[position - 1];
-                            left = convert_to_signed(uleft, 24);
-                            uright = (DECODE_UTYPE)(left - convert_to_signed(sample, 25));
-
-                            buffer[position] = (uright >> 16) & 0xFF;
-                            buffer[position + 1] = (uright >> 8) & 0xFF;
-                            buffer[position + 2] = uright & 0xFF;
-                        }
-                        data_output->position += 6;
-                        return 1;
-#endif
 #ifdef DECODE_8_BITS
                     case 9:
                         left = convert_to_signed(buffer[position - 1], 8);
@@ -281,6 +239,26 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                         data_output->position += 3;
                         return 1;
 #endif
+#ifdef DECODE_16_BITS
+                    case 17:
+                        if(data_output->is_little_endian) {
+                            uleft = (buffer[position - 1] << 8) | buffer[position - 2];
+                            left = convert_to_signed(uleft, 16);
+                            uright = (DECODE_UTYPE)(left - convert_to_signed(sample, 17));
+
+                            buffer[position] = uright & 0xFF;
+                            buffer[position + 1] = (uright >> 8) & 0xFF;
+                        } else {
+                            uleft = (buffer[position - 2] << 8) | buffer[position - 1];
+                            left = convert_to_signed(uleft, 16);
+                            uright = (DECODE_UTYPE)(left - convert_to_signed(sample, 17));
+
+                            buffer[position] = (uright >> 8) & 0xFF;
+                            buffer[position + 1] = uright & 0xFF;
+                        }
+                        data_output->position += 4;
+                        return 1;
+#endif
 #ifdef DECODE_20_BITS
                     case 21:
                         if(data_output->is_little_endian) {
@@ -301,6 +279,28 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                             buffer[position + 2] = uright & 0xFF;
                         }
                         data_output->position += 5;
+                        return 1;
+#endif
+#ifdef DECODE_24_BITS
+                    case 25:
+                        if(data_output->is_little_endian) {
+                            uleft = (buffer[position - 1] << 16) | (buffer[position - 2] << 8) | buffer[position - 3];
+                            left = convert_to_signed(uleft, 24);
+                            uright = (DECODE_UTYPE)(left - convert_to_signed(sample, 25));
+
+                            buffer[position] = uright & 0xFF;
+                            buffer[position + 1] = (uright >> 8) & 0xFF;
+                            buffer[position + 2] = (uright >> 16) & 0xFF;
+                        } else {
+                            uleft = (buffer[position - 3] << 16) | (buffer[position - 2] << 8) | buffer[position - 1];
+                            left = convert_to_signed(uleft, 24);
+                            uright = (DECODE_UTYPE)(left - convert_to_signed(sample, 25));
+
+                            buffer[position] = (uright >> 16) & 0xFF;
+                            buffer[position + 1] = (uright >> 8) & 0xFF;
+                            buffer[position + 2] = uright & 0xFF;
+                        }
+                        data_output->position += 6;
                         return 1;
 #endif
 #ifdef DECODE_32_BITS
@@ -334,23 +334,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
         case RIGHT_SIDE:
             if(channel_nb == 0) {       /* Since we read the difference first, we store it in the buffer as big endian (because I can~)*/
                 switch(sample_size) {
-#ifdef DECODE_16_BITS
-                    case 17:
-                        buffer[position] = sample >> 9;
-                        buffer[position + 1] = (sample >> 1) & 0xFF;
-                        buffer[position + 2] = sample & 0x01;
-                        data_output->position += 4;
-                        return 1;
-#endif
-#ifdef DECODE_24_BITS
-                    case 25:
-                        buffer[position] = sample >> 17;
-                        buffer[position + 1] = (sample >> 9) & 0xFF;
-                        buffer[position + 2] = (sample >> 1) & 0xFF;
-                        buffer[position + 3] = sample & 0x01;
-                        data_output->position += 6;
-                        return 1;
-#endif
 #ifdef DECODE_8_BITS
                     case 9:
                         buffer[position] = sample >> 1;
@@ -365,12 +348,29 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                         data_output->position += 3;
                         return 1;
 #endif
+#ifdef DECODE_16_BITS
+                    case 17:
+                        buffer[position] = sample >> 9;
+                        buffer[position + 1] = (sample >> 1) & 0xFF;
+                        buffer[position + 2] = sample & 0x01;
+                        data_output->position += 4;
+                        return 1;
+#endif
 #ifdef DECODE_20_BITS
                     case 21:
                         buffer[position] = sample >> 13;
                         buffer[position + 1] = (sample >> 5) & 0xFF;
                         buffer[position + 2] = sample & 0x1F;
                         data_output->position += 5;
+                        return 1;
+#endif
+#ifdef DECODE_24_BITS
+                    case 25:
+                        buffer[position] = sample >> 17;
+                        buffer[position + 1] = (sample >> 9) & 0xFF;
+                        buffer[position + 2] = (sample >> 1) & 0xFF;
+                        buffer[position + 3] = sample & 0x01;
+                        data_output->position += 6;
                         return 1;
 #endif
 #ifdef DECODE_32_BITS
@@ -390,56 +390,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                     DECODE_UTYPE uleft = 0;
                     DECODE_TYPE right = 0;
 
-#ifdef DECODE_16_BITS
-                    case 16:
-                        difference = convert_to_signed((buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 17);
-                        if(data_output->is_signed)
-                            right = convert_to_signed(sample, 16);
-                        else
-                            right = convert_to_signed(sample, 16) + 32768;
-                        uleft = (DECODE_UTYPE)(right + difference);
-
-                        if(data_output->is_little_endian) {
-                            buffer[position - 2] = uleft & 0xFF;
-                            buffer[position - 1] = (uleft >> 8) & 0xFF;
-                            buffer[position] = right & 0xFF;
-                            buffer[position + 1] = (right >> 8) & 0xFF;
-                        } else {
-                            buffer[position - 2] = (uleft >> 8) & 0xFF;
-                            buffer[position - 1] = uleft & 0xFF;
-                            buffer[position] = (right >> 8) & 0xFF;
-                            buffer[position + 1] = right & 0xFF;
-                        }
-                        data_output->position += 4;
-                        return 1;
-#endif
-#ifdef DECODE_24_BITS
-                    case 24:
-                        difference = convert_to_signed((buffer[position - 3] << 17) | (buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 25);
-                        if(data_output->is_signed)
-                            right = convert_to_signed(sample, 24);
-                        else
-                            right = convert_to_signed(sample, 24) + 8388608;
-                        uleft = (DECODE_UTYPE)(right + difference);
-
-                        if(data_output->is_little_endian) {
-                            buffer[position - 3] = uleft & 0xFF;
-                            buffer[position - 2] = (uleft >> 8) & 0xFF;
-                            buffer[position - 1] = (uleft >> 16) & 0xFF;
-                            buffer[position] = right & 0xFF;
-                            buffer[position + 1] = (right >> 8) & 0xFF;
-                            buffer[position + 2] = (right >> 16) & 0xFF;
-                        } else {
-                            buffer[position - 3] = (uleft >> 16) & 0xFF;
-                            buffer[position - 2] = (uleft >> 8) & 0xFF;
-                            buffer[position - 1] = uleft & 0xFF;
-                            buffer[position] = (right >> 16) & 0xFF;
-                            buffer[position + 1] = (right >> 8) & 0xFF;
-                            buffer[position + 2] = right & 0xFF;
-                        }
-                        data_output->position += 6;
-                        return 1;
-#endif
 #ifdef DECODE_8_BITS
                     case 8:
                         difference = convert_to_signed((buffer[position - 1] << 1) | (buffer[position] & 0x01), 9);
@@ -475,6 +425,29 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                         data_output->position += 3;
                         return 1;
 #endif
+#ifdef DECODE_16_BITS
+                    case 16:
+                        difference = convert_to_signed((buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 17);
+                        if(data_output->is_signed)
+                            right = convert_to_signed(sample, 16);
+                        else
+                            right = convert_to_signed(sample, 16) + 32768;
+                        uleft = (DECODE_UTYPE)(right + difference);
+
+                        if(data_output->is_little_endian) {
+                            buffer[position - 2] = uleft & 0xFF;
+                            buffer[position - 1] = (uleft >> 8) & 0xFF;
+                            buffer[position] = right & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                        } else {
+                            buffer[position - 2] = (uleft >> 8) & 0xFF;
+                            buffer[position - 1] = uleft & 0xFF;
+                            buffer[position] = (right >> 8) & 0xFF;
+                            buffer[position + 1] = right & 0xFF;
+                        }
+                        data_output->position += 4;
+                        return 1;
+#endif
 #ifdef DECODE_20_BITS
                     case 20:
                         difference = convert_to_signed((buffer[position - 2] << 13) | (buffer[position - 1] << 5) | (buffer[position] & 0x1F), 21);
@@ -498,6 +471,33 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                             buffer[position + 2] = right & 0xFF;
                         }
                         data_output->position += 5;
+                        return 1;
+#endif
+#ifdef DECODE_24_BITS
+                    case 24:
+                        difference = convert_to_signed((buffer[position - 3] << 17) | (buffer[position - 2] << 9) | (buffer[position - 1] << 1) | (buffer[position] & 0x01), 25);
+                        if(data_output->is_signed)
+                            right = convert_to_signed(sample, 24);
+                        else
+                            right = convert_to_signed(sample, 24) + 8388608;
+                        uleft = (DECODE_UTYPE)(right + difference);
+
+                        if(data_output->is_little_endian) {
+                            buffer[position - 3] = uleft & 0xFF;
+                            buffer[position - 2] = (uleft >> 8) & 0xFF;
+                            buffer[position - 1] = (uleft >> 16) & 0xFF;
+                            buffer[position] = right & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                            buffer[position + 2] = (right >> 16) & 0xFF;
+                        } else {
+                            buffer[position - 3] = (uleft >> 16) & 0xFF;
+                            buffer[position - 2] = (uleft >> 8) & 0xFF;
+                            buffer[position - 1] = uleft & 0xFF;
+                            buffer[position] = (right >> 16) & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                            buffer[position + 2] = right & 0xFF;
+                        }
+                        data_output->position += 6;
                         return 1;
 #endif
 #ifdef DECODE_32_BITS
@@ -538,21 +538,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
         case MID_SIDE:
             if(channel_nb == 0) {
                 switch(sample_size) {
-#ifdef DECODE_16_BITS
-                    case 16:
-                        buffer[position] = (sample >> 8) & 0xFF;
-                        buffer[position + 1] = sample & 0xFF;
-                        data_output->position += 4;
-                        return 1;
-#endif
-#ifdef DECODE_24_BITS
-                    case 24:
-                        buffer[position] = (sample >> 16) & 0xFF;
-                        buffer[position + 1] = (sample >> 8) & 0xFF;
-                        buffer[position + 2] = sample & 0xFF;
-                        data_output->position += 6;
-                        return 1;
-#endif
 #ifdef DECODE_8_BITS
                     case 8:
                         buffer[position] = sample & 0xFF;
@@ -566,12 +551,27 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                         data_output->position += 3;
                         return 1;
 #endif
+#ifdef DECODE_16_BITS
+                    case 16:
+                        buffer[position] = (sample >> 8) & 0xFF;
+                        buffer[position + 1] = sample & 0xFF;
+                        data_output->position += 4;
+                        return 1;
+#endif
 #ifdef DECODE_20_BITS
                     case 20:
                         buffer[position] = (sample >> 12) & 0xFF;
                         buffer[position + 1] = (sample >> 4) & 0xFF;
                         buffer[position + 2] = sample & 0x0F;
                         data_output->position += 5;
+                        return 1;
+#endif
+#ifdef DECODE_24_BITS
+                    case 24:
+                        buffer[position] = (sample >> 16) & 0xFF;
+                        buffer[position + 1] = (sample >> 8) & 0xFF;
+                        buffer[position + 2] = sample & 0xFF;
+                        data_output->position += 6;
                         return 1;
 #endif
 #ifdef DECODE_32_BITS
@@ -591,62 +591,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                     DECODE_UTYPE left = 0;
                     DECODE_UTYPE right = 0;
 
-#ifdef DECODE_16_BITS
-                    case 17:
-                        mid = convert_to_signed((buffer[position - 2] << 8) | buffer[position - 1], 16);
-                        side = convert_to_signed(sample, 17);
-                        left = (DECODE_UTYPE)((((mid << 1) | (side & 0x1)) + side) >> 1);
-                        right = (DECODE_UTYPE)((((mid << 1) | (side & 0x1)) - side) >> 1);
-
-                        if(!data_output->is_signed) {
-                            left += 32768;
-                            right += 32768;
-                        }
-
-                        if(data_output->is_little_endian) {
-                            buffer[position - 2] = left & 0xFF;
-                            buffer[position - 1] = (left >> 8) & 0xFF;
-                            buffer[position] = right & 0xFF;
-                            buffer[position + 1] = (right >> 8) & 0xFF;
-                        } else {
-                            buffer[position - 2] = (left >> 8) & 0xFF;
-                            buffer[position - 1] = left & 0xFF;
-                            buffer[position] = (right >> 8) & 0xFF;
-                            buffer[position + 1] = right & 0xFF;
-                        }
-                        data_output->position += 4;
-                        return 1;
-#endif
-#ifdef DECODE_24_BITS
-                    case 25:
-                        mid = convert_to_signed((buffer[position - 3] << 16) | (buffer[position - 2] << 8) | buffer[position - 1], 24);
-                        side = convert_to_signed(sample, 25);
-                        left = (DECODE_UTYPE)((((mid << 1) | (side & 0x1)) + side) >> 1);
-                        right = (DECODE_UTYPE)((((mid << 1) | (side & 0x1)) - side) >> 1);
-
-                        if(!data_output->is_signed) {
-                            left += 8388608;
-                            right += 8388608;
-                        }
-
-                        if(data_output->is_little_endian) {
-                            buffer[position - 3] = left & 0xFF;
-                            buffer[position - 2] = (left >> 8) & 0xFF;
-                            buffer[position - 1] = (left >> 16) & 0xFF;
-                            buffer[position] = right & 0xFF;
-                            buffer[position + 1] = (right >> 8) & 0xFF;
-                            buffer[position + 2] = (right >> 16) & 0xFF;
-                        } else {
-                            buffer[position - 3] = (left >> 16) & 0xFF;
-                            buffer[position - 2] = (left >> 8) & 0xFF;
-                            buffer[position - 1] = left & 0xFF;
-                            buffer[position] = (right >> 16) & 0xFF;
-                            buffer[position + 1] = (right >> 8) & 0xFF;
-                            buffer[position + 2] = right & 0xFF;
-                        }
-                        data_output->position +=6;
-                        return 1;
-#endif
 #ifdef DECODE_8_BITS
                     case 9:
                         mid = convert_to_signed(buffer[position - 1], 8);
@@ -688,6 +632,32 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                         data_output->position += 3;
                         return 1;
 #endif
+#ifdef DECODE_16_BITS
+                    case 17:
+                        mid = convert_to_signed((buffer[position - 2] << 8) | buffer[position - 1], 16);
+                        side = convert_to_signed(sample, 17);
+                        left = (DECODE_UTYPE)((((mid << 1) | (side & 0x1)) + side) >> 1);
+                        right = (DECODE_UTYPE)((((mid << 1) | (side & 0x1)) - side) >> 1);
+
+                        if(!data_output->is_signed) {
+                            left += 32768;
+                            right += 32768;
+                        }
+
+                        if(data_output->is_little_endian) {
+                            buffer[position - 2] = left & 0xFF;
+                            buffer[position - 1] = (left >> 8) & 0xFF;
+                            buffer[position] = right & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                        } else {
+                            buffer[position - 2] = (left >> 8) & 0xFF;
+                            buffer[position - 1] = left & 0xFF;
+                            buffer[position] = (right >> 8) & 0xFF;
+                            buffer[position + 1] = right & 0xFF;
+                        }
+                        data_output->position += 4;
+                        return 1;
+#endif
 #ifdef DECODE_20_BITS
                     case 21:
                         mid = convert_to_signed((buffer[position - 2] << 12) | (buffer[position - 1] << 4) | (buffer[position] & 0x0F), 20);
@@ -714,6 +684,36 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                             buffer[position + 2] = right & 0xFF;
                         }
                         data_output->position += 5;
+                        return 1;
+#endif
+#ifdef DECODE_24_BITS
+                    case 25:
+                        mid = convert_to_signed((buffer[position - 3] << 16) | (buffer[position - 2] << 8) | buffer[position - 1], 24);
+                        side = convert_to_signed(sample, 25);
+                        left = (DECODE_UTYPE)((((mid << 1) | (side & 0x1)) + side) >> 1);
+                        right = (DECODE_UTYPE)((((mid << 1) | (side & 0x1)) - side) >> 1);
+
+                        if(!data_output->is_signed) {
+                            left += 8388608;
+                            right += 8388608;
+                        }
+
+                        if(data_output->is_little_endian) {
+                            buffer[position - 3] = left & 0xFF;
+                            buffer[position - 2] = (left >> 8) & 0xFF;
+                            buffer[position - 1] = (left >> 16) & 0xFF;
+                            buffer[position] = right & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                            buffer[position + 2] = (right >> 16) & 0xFF;
+                        } else {
+                            buffer[position - 3] = (left >> 16) & 0xFF;
+                            buffer[position - 2] = (left >> 8) & 0xFF;
+                            buffer[position - 1] = left & 0xFF;
+                            buffer[position] = (right >> 16) & 0xFF;
+                            buffer[position + 1] = (right >> 8) & 0xFF;
+                            buffer[position + 2] = right & 0xFF;
+                        }
+                        data_output->position +=6;
                         return 1;
 #endif
 #ifdef DECODE_32_BITS
@@ -759,48 +759,6 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
             if(shift == 0) {
 #endif
                 switch(sample_size) {
-#ifdef DECODE_16_BITS
-                    case 16:
-                        if(!data_output->is_signed)
-                            sample = (DECODE_UTYPE)(convert_to_signed(sample, 16) + 32768);
-
-                        if(data_output->is_little_endian) {
-                            buffer[position] = sample & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                        } else {
-                            buffer[position] = (sample >> 8) & 0xFF;
-                            buffer[position + 1] = sample & 0xFF;
-                        }
-
-                        #ifdef STEREO_ONLY
-                        data_output->position += 4;
-                        #else
-                        data_output->position += (2 * (channel_assignement + 1));
-                        #endif
-                        return 1;
-#endif
-#ifdef DECODE_24_BITS
-                    case 24:
-                        if(!data_output->is_signed)
-                            sample = (DECODE_UTYPE)(convert_to_signed(sample, 24) + 8388608);
-
-                        if(data_output->is_little_endian) {
-                            buffer[position] = sample & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                            buffer[position + 2] = (sample >> 16) & 0xFF;
-                        } else {
-                            buffer[position] = (sample >> 16) & 0xFF;
-                            buffer[position + 1] = (sample >> 8) & 0xFF;
-                            buffer[position + 2] = sample & 0xFF;
-                        }
-
-                        #ifdef STEREO_ONLY
-                        data_output->position += 6;
-                        #else
-                        data_output->position += (3 * (channel_assignement + 1));
-                        #endif
-                        return 1;
-#endif
 #ifdef DECODE_8_BITS
                     case 8:
                         if(!data_output->is_signed)
@@ -874,6 +832,26 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                         return -1;
                         #endif
 #endif
+#ifdef DECODE_16_BITS
+                    case 16:
+                        if(!data_output->is_signed)
+                            sample = (DECODE_UTYPE)(convert_to_signed(sample, 16) + 32768);
+
+                        if(data_output->is_little_endian) {
+                            buffer[position] = sample & 0xFF;
+                            buffer[position + 1] = (sample >> 8) & 0xFF;
+                        } else {
+                            buffer[position] = (sample >> 8) & 0xFF;
+                            buffer[position + 1] = sample & 0xFF;
+                        }
+
+                        #ifdef STEREO_ONLY
+                        data_output->position += 4;
+                        #else
+                        data_output->position += (2 * (channel_assignement + 1));
+                        #endif
+                        return 1;
+#endif
 #ifdef DECODE_20_BITS
                     case 20:
                         if(!data_output->is_signed)
@@ -934,6 +912,28 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
                         }
                         return -1;
                         #endif
+#endif
+#ifdef DECODE_24_BITS
+                    case 24:
+                        if(!data_output->is_signed)
+                            sample = (DECODE_UTYPE)(convert_to_signed(sample, 24) + 8388608);
+
+                        if(data_output->is_little_endian) {
+                            buffer[position] = sample & 0xFF;
+                            buffer[position + 1] = (sample >> 8) & 0xFF;
+                            buffer[position + 2] = (sample >> 16) & 0xFF;
+                        } else {
+                            buffer[position] = (sample >> 16) & 0xFF;
+                            buffer[position + 1] = (sample >> 8) & 0xFF;
+                            buffer[position + 2] = sample & 0xFF;
+                        }
+
+                        #ifdef STEREO_ONLY
+                        data_output->position += 6;
+                        #else
+                        data_output->position += (3 * (channel_assignement + 1));
+                        #endif
+                        return 1;
 #endif
 #ifdef DECODE_32_BITS
                     case 32:
