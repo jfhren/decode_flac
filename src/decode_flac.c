@@ -786,6 +786,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                 if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
                     break;
                 ++crt_sample;
+                goto decode_fixed_subframe;
         }
 
         if(*error_code == -1)
@@ -822,6 +823,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
             subframe->next_out = subframe->next_out->next;
     }
 
+    decode_fixed_subframe:
     switch(order) {
         case 0:
             for(;crt_sample < frame_info->block_size; ++crt_sample) {
@@ -835,14 +837,11 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
 
                 if(*error_code == 0) {
                     subframe->previous_values[0].value = value;
-                    break;
+                    goto buffer_full_error;
                 }
             }
 
-            if(*error_code != 0)
-                return frame_info->block_size;
-
-            break;
+            return frame_info->block_size;
 
         case 1:
             for(;crt_sample < frame_info->block_size; ++crt_sample) {
@@ -857,13 +856,10 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                     return 0;
 
                 if(*error_code == 0)
-                    break;
+                    goto buffer_full_error;
             }
 
-            if(*error_code != 0)
-                return frame_info->block_size;
-
-            break;
+            return frame_info->block_size;
 
         case 2:
             for(;crt_sample < frame_info->block_size; ++crt_sample) {
@@ -878,15 +874,12 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                     return 0;
 
                 if(*error_code == 0)
-                    break;
+                    goto buffer_full_error;
 
                 subframe->next_out = subframe->next_out->next;
             }
 
-            if(*error_code != 0)
-                return frame_info->block_size;
-
-            break;
+            return frame_info->block_size;
 
         case 3:
             for(;crt_sample < frame_info->block_size; ++crt_sample) {
@@ -901,15 +894,12 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                     return 0;
 
                 if(*error_code == 0)
-                    break;
+                    goto buffer_full_error;
 
                 subframe->next_out = subframe->next_out->next;
             }
 
-            if(*error_code != 0)
-                return frame_info->block_size;
-
-            break;
+            return frame_info->block_size;
 
         case 4:
             for(;crt_sample < frame_info->block_size; ++crt_sample) {
@@ -924,14 +914,15 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                     return 0;
 
                 if(*error_code == 0)
-                    break;
+                    goto buffer_full_error;
 
                 subframe->next_out = subframe->next_out->next;
             }
 
-            if(*error_code != 0)
-                return frame_info->block_size;
+            return frame_info->block_size;
     }
+
+    buffer_full_error:
 
     subframe->data_input_position = get_position(data_input);
     subframe->data_input_shift = data_input->shift;
@@ -1452,6 +1443,7 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
                 if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
                     break;
                 ++crt_sample;
+                goto decode_lpc_subframe;
         }
 
         if(*error_code == -1)
@@ -1487,6 +1479,7 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
         subframe->next_out = subframe->next_out->next;
     }
 
+    decode_lpc_subframe:
     for(; crt_sample < frame_info->block_size; ++crt_sample) {
         DECODE_TYPE value = 0;
         previous_value_t* crt = subframe->next_out;
