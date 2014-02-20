@@ -15,9 +15,9 @@
 /**
  * A linked list element for saving a previously decode value.
  */
-typedef struct previous_value_t {
+typedef struct previous_value {
     DECODE_TYPE value;
-    struct previous_value_t* next;
+    struct previous_value* next;
 } previous_value_t ;
 
 /**
@@ -196,22 +196,12 @@ static int skip_metadata(data_input_t* data_input) {
 
         was_last = buffer[position] >> 7;
         position += 1;
+
         length = (buffer[position] << 16) | (buffer[position + 1] << 8) | buffer[position + 2];
         data_input->position = position + 3;
-        while(length != 0) {
-            int int_length = length > INT_MAX ? INT_MAX : length;
 
-            if(should_refill_input_buffer(data_input, int_length)) {
-                length -= (data_input->read_size - data_input->position);
-                int_length = length > INT_MAX ? INT_MAX : length;
-                data_input->position = data_input->read_size;
-                if(refill_input_buffer_at_least(data_input, int_length) == -1)
-                    return -1;
-            } else {
-                data_input->position += int_length;
-                break;
-            }
-        }
+        if(skip_nb_bits(data_input, (int)(length * 8)) == -1)
+            return -1;
     } while(!was_last);
 
     return 0;
@@ -669,6 +659,50 @@ static uint16_t decode_verbatim(data_input_t* data_input, data_output_t* data_ou
 }
 
 
+#define INIT_ONE_WARMUP(data_input, subframe, index, next_index, error_code) \
+    do { \
+        (subframe)->previous_values[(index)].value = convert_to_signed(get_shifted_bits((data_input), (subframe)->bits_per_sample - (subframe)->wasted_bits_per_sample, (error_code)), (subframe)->bits_per_sample - (subframe)->wasted_bits_per_sample); \
+        (subframe)->previous_values[(index)].next = (subframe)->previous_values + (next_index); \
+    } while(0)
+
+
+#define OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, index, crt_sample, error_code) \
+    do { \
+        if((*(error_code) = put_shifted_bits((data_output), (subframe)->previous_values[(index)].value << (subframe)->wasted_bits_per_sample, (subframe)->bits_per_sample, (frame_info)->channel_assignement, (channel_nb))) != 1) \
+            break; \
+        ++(crt_sample); \
+    } while(0)
+
+#ifdef STEREO_ONLY
+#define SKIP_INPUT(data_input, frame_info, subframe, channel_nb, order,  starting_sample, error_code) \
+    do { \
+        (subframe)->data_input_position = get_position((data_input)); \
+        (subframe)->data_input_shift = (data_input)->shift; \
+        if(((channel_nb) == 0) && ((frame_info)->subframes_info[1].data_input_position == -1)) { \
+            uint16_t crt_skipped_sample = (starting_sample); \
+            rice_coding_info_t residual_info = (subframe)->residual_info; \
+            for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) \
+                get_next_rice_residual((data_input), &residual_info, (frame_info)->block_size, (order), (error_code)); \
+            if(*(error_code) == -1) \
+                return 0; \
+        } \
+    } while(0)
+#else
+#define SKIP_INPUT(data_input, frame_info, subframe, channel_nb, order,  starting_sample, error_code) \
+    do { \
+        (subframe)->data_input_position = get_position((data_input)); \
+        (subframe)->data_input_shift = (data_input)->shift; \
+        if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) { \
+            uint16_t crt_skipped_sample = (starting_sample); \
+            rice_coding_info_t residual_info = (subframe)->residual_info; \
+            for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample) \
+                get_next_rice_residual((data_input), &residual_info, (frame_info)->block_size, (order), (error_code)); \
+            if(*(error_code) == -1) \
+                return 0; \
+        } \
+    } while(0)
+#endif
+
 /**
  * Decode a fixed subframe into the data output sink. In a fixed subframe,
  * samples are encoded using a fixed linear predictor of zero to fourth order.
@@ -697,29 +731,20 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
         if(order) {
             switch(order) {
                 case 4:
-                    subframe->previous_values[0].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                    if(*error_code == -1)
-                        return 0;
-                    subframe->previous_values[0].next = subframe->previous_values + 1;
+                    INIT_ONE_WARMUP(data_input, subframe, 0, 1, error_code);
 
                 case 3:
-                    subframe->previous_values[order - 3].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                    if(*error_code == -1)
-                        return 0;
-                    subframe->previous_values[order - 3].next = subframe->previous_values + order - 2;
+                    INIT_ONE_WARMUP(data_input, subframe, order - 3, order - 2, error_code);
 
                 case 2:
-                    subframe->previous_values[order - 2].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                    if(*error_code == -1)
-                        return 0;
-                    subframe->previous_values[order - 2].next = subframe->previous_values + order - 1;
+                    INIT_ONE_WARMUP(data_input, subframe, order - 2, order - 1, error_code);
 
                 case 1:
-                    subframe->previous_values[order - 1].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                    if(*error_code == -1)
-                        return 0;
-                    subframe->previous_values[order - 1].next = subframe->previous_values + order;
+                    INIT_ONE_WARMUP(data_input, subframe, order - 1, order, error_code);
             }
+
+            if(*error_code == -1)
+                return 0;
 
             if(order > 1)
                 subframe->previous_values[order - 1].next = subframe->previous_values;
@@ -768,51 +793,24 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
     if(crt_sample < order) {
         switch(order - crt_sample) {
             case 4:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[0].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, 0, crt_sample, error_code);
 
             case 3:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 2:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 1:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
                 goto decode_fixed_subframe;
         }
 
         if(*error_code == -1)
             return 0;
 
-        if(*error_code == 0) {
-            subframe->data_input_position = get_position(data_input);
-            subframe->data_input_shift = data_input->shift;
-
-#ifdef STEREO_ONLY
-            if((channel_nb == 0) && (frame_info->subframes_info[1].data_input_position == -1)) {
-#else
-            if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
-#endif
-                uint16_t crt_skipped_sample = order;
-                rice_coding_info_t residual_info = subframe->residual_info; 
-
-                for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample)
-                    get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
-
-                if(*error_code == -1)
-                    return 0;
-            }
-
-            return crt_sample;
-        }
+        SKIP_INPUT(data_input, frame_info, subframe, channel_nb, order, order, error_code);
+        return crt_sample;
     } else {
         *error_code = put_shifted_bits(data_output, subframe->next_out->value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb);
         if(*error_code == -1)
@@ -823,7 +821,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
             subframe->next_out = subframe->next_out->next;
     }
 
-    decode_fixed_subframe:
+decode_fixed_subframe:;
     switch(order) {
         case 0:
             for(;crt_sample < frame_info->block_size; ++crt_sample) {
@@ -843,6 +841,15 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
 
             return frame_info->block_size;
 
+#define OUTPUT_VALUE(data_output, frame_info, subframe, channel_nb, value, error_code) \
+    do { \
+        *(error_code) = put_shifted_bits((data_output), (value) << (subframe)->wasted_bits_per_sample, (subframe)->bits_per_sample, (frame_info)->channel_assignement, (channel_nb)); \
+        if(*(error_code) == -1) \
+            return 0; \
+        if(*(error_code) == 0) \
+            goto buffer_full_error; \
+    } while(0)
+
         case 1:
             for(;crt_sample < frame_info->block_size; ++crt_sample) {
                 DECODE_TYPE value = subframe->previous_values[0].value + get_next_rice_residual(data_input, &(subframe->residual_info), frame_info->block_size, 1, error_code);
@@ -851,12 +858,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                 if(*error_code == -1)
                     return 0;
 
-                *error_code = put_shifted_bits(data_output, value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb);
-                if(*error_code == -1)
-                    return 0;
-
-                if(*error_code == 0)
-                    goto buffer_full_error;
+                OUTPUT_VALUE(data_output, frame_info, subframe, channel_nb, value, error_code);
             }
 
             return frame_info->block_size;
@@ -869,12 +871,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                 if(*error_code == -1)
                     return 0;
 
-                *error_code = put_shifted_bits(data_output, value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb);
-                if(*error_code == -1)
-                    return 0;
-
-                if(*error_code == 0)
-                    goto buffer_full_error;
+                OUTPUT_VALUE(data_output, frame_info, subframe, channel_nb, value, error_code);
 
                 subframe->next_out = subframe->next_out->next;
             }
@@ -889,12 +886,7 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                 if(*error_code == -1)
                     return 0;
 
-                *error_code = put_shifted_bits(data_output, value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb);
-                if(*error_code == -1)
-                    return 0;
-
-                if(*error_code == 0)
-                    goto buffer_full_error;
+                OUTPUT_VALUE(data_output, frame_info, subframe, channel_nb, value, error_code);
 
                 subframe->next_out = subframe->next_out->next;
             }
@@ -909,39 +901,20 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
                 if(*error_code == -1)
                     return 0;
 
-                *error_code = put_shifted_bits(data_output, value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb);
-                if(*error_code == -1)
-                    return 0;
-
-                if(*error_code == 0)
-                    goto buffer_full_error;
+                OUTPUT_VALUE(data_output, frame_info, subframe, channel_nb, value, error_code);
 
                 subframe->next_out = subframe->next_out->next;
             }
 
             return frame_info->block_size;
+
+#undef OUTPUT_VALUE
+
     }
 
-    buffer_full_error:
 
-    subframe->data_input_position = get_position(data_input);
-    subframe->data_input_shift = data_input->shift;
-
-#ifdef STEREO_ONLY
-    if((channel_nb == 0) && (frame_info->subframes_info[1].data_input_position == -1)) {
-#else
-    if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
-#endif
-        uint16_t crt_skipped_sample = crt_sample + 1;
-        rice_coding_info_t residual_info = subframe->residual_info; 
-
-        for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample)
-            get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
-
-        if(*error_code == -1)
-            return 0;
-    }
-
+buffer_full_error:;
+    SKIP_INPUT(data_input, frame_info, subframe, channel_nb, order, crt_sample + 1, error_code);
     return crt_sample;
 
 }
@@ -977,163 +950,131 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
 
         switch(order) {
             case 32:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 31:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 30:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 29:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 28:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 27:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 26:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 25:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 24:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 23:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 22:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 21:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 20:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 19:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 18:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 17:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 16:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 15:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 14:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 13:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 12:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 11:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 10:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 9:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 8:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 7:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 6:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 5:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 4:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 3:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 2:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
 
             case 1:
-                subframe->previous_values[i].value = convert_to_signed(get_shifted_bits(data_input, subframe->bits_per_sample - subframe->wasted_bits_per_sample, error_code), subframe->bits_per_sample - subframe->wasted_bits_per_sample);
-                subframe->previous_values[i].next = subframe->previous_values + i + 1;
+                INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
         }
 
         if(*error_code == -1)
@@ -1150,103 +1091,110 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
         if(*error_code == -1)
             return 0;
 
+#define INIT_ONE_COEFF(data_input, subframe, index, error_code) \
+    do { \
+        (subframe)->coeffs[(index)] = convert_to_signed(get_shifted_bits((data_input), (subframe)->lpc_precision, (error_code)), (subframe)->lpc_precision); \
+    } while(0)
+
         switch(order) {
             case 32:
-                subframe->coeffs[0] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, 0, error_code);
 
             case 31:
-                subframe->coeffs[order - 31] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 31, error_code);
 
             case 30:
-                subframe->coeffs[order - 30] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 30, error_code);
 
             case 29:
-                subframe->coeffs[order - 29] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 29, error_code);
 
             case 28:
-                subframe->coeffs[order - 28] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 28, error_code);
 
             case 27:
-                subframe->coeffs[order - 27] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 27, error_code);
 
             case 26:
-                subframe->coeffs[order - 26] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 26, error_code);
 
             case 25:
-                subframe->coeffs[order - 25] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 25, error_code);
 
             case 24:
-                subframe->coeffs[order - 24] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 24, error_code);
 
             case 23:
-                subframe->coeffs[order - 23] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 23, error_code);
 
             case 22:
-                subframe->coeffs[order - 22] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 22, error_code);
 
             case 21:
-                subframe->coeffs[order - 21] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 21, error_code);
 
             case 20:
-                subframe->coeffs[order - 20] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 20, error_code);
 
             case 19:
-                subframe->coeffs[order - 19] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 19, error_code);
 
             case 18:
-                subframe->coeffs[order - 18] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 18, error_code);
 
             case 17:
-                subframe->coeffs[order - 17] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 17, error_code);
 
             case 16:
-                subframe->coeffs[order - 16] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 16, error_code);
 
             case 15:
-                subframe->coeffs[order - 15] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 15, error_code);
 
             case 14:
-                subframe->coeffs[order - 14] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 14, error_code);
 
             case 13:
-                subframe->coeffs[order - 13] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 13, error_code);
 
             case 12:
-                subframe->coeffs[order - 12] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 12, error_code);
 
             case 11:
-                subframe->coeffs[order - 11] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 11, error_code);
 
             case 10:
-                subframe->coeffs[order - 10] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 10, error_code);
 
             case 9:
-                subframe->coeffs[order - 9] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 9, error_code);
 
             case 8:
-                subframe->coeffs[order - 8] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 8, error_code);
 
             case 7:
-                subframe->coeffs[order - 7] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 7, error_code);
 
             case 6:
-                subframe->coeffs[order - 6] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 6, error_code);
 
             case 5:
-                subframe->coeffs[order - 5] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 5, error_code);
 
             case 4:
-                subframe->coeffs[order - 4] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 4, error_code);
 
             case 3:
-                subframe->coeffs[order - 3] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 3, error_code);
 
             case 2:
-                subframe->coeffs[order - 2] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 2, error_code);
 
             case 1:
-                subframe->coeffs[order - 1] = convert_to_signed(get_shifted_bits(data_input, subframe->lpc_precision, error_code), subframe->lpc_precision);
+                INIT_ONE_COEFF(data_input, subframe, order - 1, error_code);
         }
+
+#undef INIT_ONE_COEFF
 
         if(*error_code == -1)
             return 0;
@@ -1285,191 +1233,108 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
     if(crt_sample < order) {
         switch(order - crt_sample) {
             case 32:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[0].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, 0, crt_sample, error_code);
 
             case 31:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 30:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 29:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 28:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 27:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 26:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 25:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 24:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 23:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 22:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 21:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 20:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 19:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 18:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 17:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 16:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 15:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 14:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 13:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 12:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 11:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 10:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 9:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 8:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 7:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 6:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 5:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 4:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 3:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 2:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
 
             case 1:
-                if((*error_code = put_shifted_bits(data_output, subframe->previous_values[crt_sample].value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb)) != 1)
-                    break;
-                ++crt_sample;
+                OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
                 goto decode_lpc_subframe;
         }
 
         if(*error_code == -1)
             return 0;
 
-        if(*error_code == 0) {
-            subframe->data_input_position = get_position(data_input);
-            subframe->data_input_shift = data_input->shift;
-
-#ifdef STEREO_ONLY
-            if((channel_nb == 0) && (frame_info->subframes_info[1].data_input_position == -1)) {
-#else
-            if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
-#endif
-                uint16_t crt_skipped_sample = order;
-                rice_coding_info_t residual_info = subframe->residual_info; 
-
-                for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample)
-                    get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
-
-                if(*error_code == -1)
-                    return 0;
-            }
-
-            return crt_sample;
-        }
+        SKIP_INPUT(data_input, frame_info, subframe, channel_nb, order, order, error_code);
+        return crt_sample;
     } else {
         *error_code = put_shifted_bits(data_output, subframe->next_out->value << subframe->wasted_bits_per_sample, subframe->bits_per_sample, frame_info->channel_assignement, channel_nb);
         if(*error_code == -1)
@@ -1479,138 +1344,143 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
         subframe->next_out = subframe->next_out->next;
     }
 
-    decode_lpc_subframe:
+decode_lpc_subframe:;
     for(; crt_sample < frame_info->block_size; ++crt_sample) {
         DECODE_TYPE value = 0;
         previous_value_t* crt = subframe->next_out;
 
+#define ADD_TO_VALUE(subframe, crt, index, value) \
+    do { \
+        (value) += (subframe)->coeffs[(index)] * (crt)->value; \
+    } while(0)
+
         switch(order) {
             case 32:
-                value += subframe->coeffs[31] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 31, value);
                 crt = crt->next;
 
             case 31:
-                value += subframe->coeffs[30] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 30, value);
                 crt = crt->next;
 
             case 30:
-                value += subframe->coeffs[29] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 29, value);
                 crt = crt->next;
 
             case 29:
-                value += subframe->coeffs[28] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 28, value);
                 crt = crt->next;
 
             case 28:
-                value += subframe->coeffs[27] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 27, value);
                 crt = crt->next;
 
             case 27:
-                value += subframe->coeffs[26] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 26, value);
                 crt = crt->next;
 
             case 26:
-                value += subframe->coeffs[25] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 25, value);
                 crt = crt->next;
 
             case 25:
-                value += subframe->coeffs[24] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 24, value);
                 crt = crt->next;
 
             case 24:
-                value += subframe->coeffs[23] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 23, value);
                 crt = crt->next;
 
             case 23:
-                value += subframe->coeffs[22] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 22, value);
                 crt = crt->next;
 
             case 22:
-                value += subframe->coeffs[21] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 21, value);
                 crt = crt->next;
 
             case 21:
-                value += subframe->coeffs[20] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 20, value);
                 crt = crt->next;
 
             case 20:
-                value += subframe->coeffs[19] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 19, value);
                 crt = crt->next;
 
             case 19:
-                value += subframe->coeffs[18] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 18, value);
                 crt = crt->next;
 
             case 18:
-                value += subframe->coeffs[17] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 17, value);
                 crt = crt->next;
 
             case 17:
-                value += subframe->coeffs[16] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 16, value);
                 crt = crt->next;
 
             case 16:
-                value += subframe->coeffs[15] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 15, value);
                 crt = crt->next;
 
             case 15:
-                value += subframe->coeffs[14] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 14, value);
                 crt = crt->next;
 
             case 14:
-                value += subframe->coeffs[13] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 13, value);
                 crt = crt->next;
 
             case 13:
-                value += subframe->coeffs[12] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 12, value);
                 crt = crt->next;
 
             case 12:
-                value += subframe->coeffs[11] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 11, value);
                 crt = crt->next;
 
             case 11:
-                value += subframe->coeffs[10] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 10, value);
                 crt = crt->next;
 
             case 10:
-                value += subframe->coeffs[9] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 9, value);
                 crt = crt->next;
 
             case 9:
-                value += subframe->coeffs[8] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 8, value);
                 crt = crt->next;
 
             case 8:
-                value += subframe->coeffs[7] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 7, value);
                 crt = crt->next;
 
             case 7:
-                value += subframe->coeffs[6] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 6, value);
                 crt = crt->next;
 
             case 6:
-                value += subframe->coeffs[5] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 5, value);
                 crt = crt->next;
 
             case 5:
-                value += subframe->coeffs[4] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 4, value);
                 crt = crt->next;
 
             case 4:
-                value += subframe->coeffs[3] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 3, value);
                 crt = crt->next;
 
             case 3:
-                value += subframe->coeffs[2] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 2, value);
                 crt = crt->next;
 
             case 2:
-                value += subframe->coeffs[1] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 1, value);
                 crt = crt->next;
 
             case 1:
-                value += subframe->coeffs[0] * crt->value;
+                ADD_TO_VALUE(subframe, crt, 0, value);
         }
 
         if(subframe->lpc_shift < 0)
@@ -1633,24 +1503,7 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
             return 0;
 
         if(*error_code == 0) {
-            subframe->data_input_position = get_position(data_input);
-            subframe->data_input_shift = data_input->shift;
-
-#ifdef STEREO_ONLY
-            if((channel_nb == 0) && (frame_info->subframes_info[1].data_input_position == -1)) {
-#else
-            if(((channel_nb + 1) < frame_info->nb_channels) && (frame_info->subframes_info[channel_nb + 1].data_input_position == -1)) {
-#endif
-                uint16_t crt_skipped_sample = crt_sample + 1;
-                rice_coding_info_t residual_info = subframe->residual_info; 
-
-                for(; crt_skipped_sample < frame_info->block_size; ++crt_skipped_sample)
-                    get_next_rice_residual(data_input, &residual_info, frame_info->block_size, order, error_code);
-
-                if(*error_code == -1)
-                    return 0;
-            }
-
+            SKIP_INPUT(data_input, frame_info, subframe, channel_nb, order, crt_sample + 1, error_code);
             return crt_sample;
         }
 
@@ -1660,6 +1513,10 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
     return frame_info->block_size;
 
 }
+
+#undef INIT_ONE_WARMUP
+#undef OUTPUT_ONE_WARMUP
+#undef SKIP_INPUT
 
 
 /**

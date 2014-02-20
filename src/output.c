@@ -14,31 +14,6 @@
 
 
 /**
- * We suppose that if value represent a signed integer then it is using two's
- * complement representation.  For now, we just fill the whole most significant
- * (64 - size) bis with 1 if the size-th bit is one.
- *
- * @param value The value to convert.
- * @param size The number of bits making up the value.
- *
- * @return Return the converted value as a signed one on 64 bits.
- */
-DECODE_TYPE convert_to_signed(DECODE_UTYPE value, uint8_t size) {
-
-#ifdef DECODE_TYPE_16_BITS
-    return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFu) << size) | value : value;
-#elif defined DECODE_TYPE_32_BITS
-    return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFFFFFu) << size) | value : value;
-#elif defined DECODE_TYPE_64_BITS
-    return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFFFFFFFFFFFFFull) << size) | value : value;
-#else
-    #error "Should not happen but kinda did."
-#endif
-
-}
-
-
-/**
  * Dump nb_bytes bytes from the output buffer to the output file descriptor
  * starting from 0. Nothing is modified within the data_output structure.
  *

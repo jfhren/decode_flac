@@ -8,6 +8,7 @@
 #ifndef INPUT_H
 #define INPUT_H
 #include <stdint.h>
+#include <unistd.h>
 
 /**
  * Represent the input stream.
@@ -29,7 +30,11 @@ typedef struct {
  *
  * @return Return the position.
  */
-int get_position(data_input_t* data_input);
+static inline int get_position(data_input_t* data_input) {
+
+    return lseek(data_input->fd, 0, SEEK_CUR) - data_input->read_size + data_input->position;
+
+}
 
 /**
  * Skip to a saved position in the input stream.
@@ -61,7 +66,11 @@ int skip_nb_bits(data_input_t* data_input, int nb_bits_to_skip);
  *
  * @return Return 1 if the buffer should be refilled, 0 else.
  */
-int should_refill_input_buffer(data_input_t* data_input, int nb_needed_bytes);
+static inline int should_refill_input_buffer(data_input_t* data_input, int nb_needed_bytes) {
+
+   return (data_input->read_size - data_input->position) < nb_needed_bytes;
+
+}
 
 /**
  * Try to refill the input buffer with at least the desired number of bytes.

@@ -42,7 +42,19 @@ typedef struct {
  *
  * @return Return the converted value as a signed one on 64 bits.
  */
-DECODE_TYPE convert_to_signed(DECODE_UTYPE, uint8_t size);
+static inline DECODE_TYPE convert_to_signed(DECODE_UTYPE value, uint8_t size) {
+
+#ifdef DECODE_TYPE_16_BITS
+    return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFu) << size) | value : value;
+#elif defined DECODE_TYPE_32_BITS
+    return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFFFFFu) << size) | value : value;
+#elif defined DECODE_TYPE_64_BITS
+    return value & (((DECODE_UTYPE)1) << (size - 1)) ? (((DECODE_UTYPE)0xFFFFFFFFFFFFFFFFull) << size) | value : value;
+#else
+    #error "Should not happen but kinda did."
+#endif
+
+}
 
 /**
  * Dump nb_bytes bytes from the output buffer to the output file descriptor

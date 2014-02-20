@@ -15,18 +15,6 @@
 
 
 /**
- * Get the position in the input stream for later skipping back.
- *
- * @param data_input Bits and bytes are read from there.
- *
- * @return Return the position.
- */
-int get_position(data_input_t* data_input) {
-    return lseek(data_input->fd, 0, SEEK_CUR) - data_input->read_size + data_input->position;
-}
-
-
-/**
  * Skip to a saved position in the input stream.
  *
  * @param data_input     Bits and bytes are read from there.
@@ -95,23 +83,6 @@ int skip_nb_bits(data_input_t* data_input, int nb_bits_to_skip) {
     return 0;
 
 }
-
-
-/**
- * Test to see if the input should be reflled before having access to the
- * desired number of bytes.
- *
- * @param data_input      Contain the input buffer and the necessary
- *                        information to test it.
- * @param nb_needed_bytes The number of needed bytes.
- *
- * @return Return 1 if the buffer should be refilled, 0 else.
- */
-int should_refill_input_buffer(data_input_t* data_input, int nb_needed_bytes) {
-
-   return (data_input->read_size - data_input->position) < nb_needed_bytes;
-
-} 
 
 
 /**
