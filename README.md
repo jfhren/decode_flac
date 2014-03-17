@@ -30,7 +30,7 @@ You can play the outputed pcm with `aplay`. For flac encoded from a cd, you can
 type:  
 `$ ./bin/decode_flac_to_pcm some_flac_file.flac | aplay -f cd -`  
 or use the bash script `play_flac.sh`:  
-`$ PATH=$PATH:./bin/decode_flac_to_pcm; export PATH; ./play_flac.sh some_flac_file.flac some_other_flac_file.flac`
+`$ PATH=$PATH:./bin/; export PATH; ./play_flac.sh some_flac_file.flac some_other_flac_file.flac`
 
 Some options are available:  
 
