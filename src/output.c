@@ -6,38 +6,111 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "output.h"
 #include "decode_flac.h"
 
 
+static int g_output_fd = -1;
+static uint8_t g_can_pause = 0;
+
 /**
- * Dump nb_bytes bytes from the output buffer to the output file descriptor
- * starting from 0. Nothing is modified within the data_output structure.
+ * Dump nb_bits bits from the output buffer to an output file descriptor
+ * starting from 0.
  *
- * @param data_output The output buffer and the output file descriptor are
- *                    there.
- * @param nb_bytes    The number of bytes to dump from the output buffer.
+ * @param data_output The output buffer is there.
+ * @param nb_bits    The number of bits to dump from the output buffer.
  *
  * @return Return 0 if successful, -1 else.
  */
-int dump_buffer(data_output_t* data_output, int nb_bytes) {
+static int dump_buffer_to_fd(data_output_t* data_output, int nb_bits) {
 
     int nb_written_bytes_since_start = 0;
     int nb_written_bytes = 0;
+    int nb_bytes = nb_bits / 8;
 
-    while((nb_written_bytes = write(data_output->fd, data_output->buffer + nb_written_bytes_since_start, nb_bytes - nb_written_bytes_since_start)) > 0) {
+    while((nb_written_bytes = write(g_output_fd, data_output->buffer + nb_written_bytes_since_start, nb_bytes - nb_written_bytes_since_start)) > 0) {
         nb_written_bytes_since_start += nb_written_bytes;
         if(nb_written_bytes_since_start == nb_bytes)
-            return 0;
+            goto write_end;
     }
 
-    if(nb_written_bytes == -1) {
-        perror("An error occured while dumping the buffer");
+    if(nb_written_bytes == -1)
+        goto error;
+
+write_end:;
+    data_output->position = 0;
+    if(nb_bits & 7) {
+        data_output->shift = 4;
+        data_output->buffer[0] = data_output->buffer[nb_bytes];
+    } else {
+        data_output->shift = 0;
+    }
+
+    if(g_can_pause) {
+        int stdin_fl = fcntl(0, F_GETFL);
+
+        if(stdin_fl < 0)
+            goto error;
+
+        if(fcntl(0, F_SETFL, stdin_fl | O_NONBLOCK) == -1)
+            goto error;
+
+        if ( getchar() == '\n' )
+            while ( getchar() != '\n' ) {
+                sleep(1);
+            }
+
+        if(fcntl(0, F_SETFL, stdin_fl) == -1)
+            goto error;
+    }
+
+    return 0;
+
+error:
+    perror("An error occured while dumping the buffer");
+    return -1;
+
+}
+
+
+/**
+ * Init the output to a file descriptor.
+ *
+ * @param data_output      The structure representing the output to fill out.
+ * @param fd               The output file descriptor.
+ * @param buffer_size      The size of the output buffer.
+ * @param is_little_endian Should the output be in little endian?
+ * @param is_signed        Should the output be signed?
+ * @param can_pause        Can the output be paused?
+ *
+ * @return Return 0 if successful, -1 else.
+ */
+int init_data_output_to_fd(data_output_t* data_output, int fd, int buffer_size, uint8_t is_little_endian, uint8_t is_signed, uint8_t can_pause) {
+
+    data_output->dump_func = dump_buffer_to_fd;
+    g_output_fd = fd;
+
+    data_output->size = buffer_size;
+    data_output->buffer = (uint8_t*)malloc(sizeof(uint8_t) * data_output->size);
+    if(data_output->buffer == NULL) {
+        perror("An error occured while allocating the output buffer");
         return -1;
     }
+
+    data_output->write_size = data_output->size;
+    data_output->starting_position = 0;
+    data_output->starting_shift = 0;
+    data_output->position = 0;
+    data_output->shift = 0;
+    data_output->is_little_endian = is_little_endian;
+    data_output->is_signed = is_signed;
+
+    g_can_pause = can_pause;
 
     return 0;
 

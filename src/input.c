@@ -6,12 +6,47 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <string.h>
 
 #include "input.h"
+
+/**
+ * Init the input from a file descriptor.
+ *
+ * @param data_input  The structure representing the input to fill out.
+ * @param fd          The input file descriptor.
+ * @param buffer_size The size of the input buffer.
+ *
+ * @return Return 0 if successful, -1 else.
+ */
+int init_data_input_from_fd(data_input_t* data_input, int fd, int buffer_size) {
+
+    if((fd < 0) || (buffer_size < 42))
+        return -1;
+
+    data_input->fd = fd;
+
+    data_input->size = buffer_size;
+    data_input->buffer = (uint8_t*)malloc(sizeof(uint8_t) * data_input->size);
+    if(data_input->buffer == NULL) {
+        perror("An error occured while allocating the input buffer");
+        return -1;
+    }
+
+    data_input->read_size = data_input->size;
+    data_input->position = data_input->size;
+    data_input->shift = 0;
+
+    if(refill_input_buffer(data_input) != 1)
+        return -1;
+
+    return 0;
+
+}
 
 
 /**

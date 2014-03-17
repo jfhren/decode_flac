@@ -11,11 +11,24 @@
 #ifndef OUTPUT_H
 #define OUTPUT_H
 
+struct data_output_t;
+
+/**
+ * Dump nb_bits bits from the output buffer.
+ *
+ * @param data_output The output buffer is there.
+ * @param nb_bits     The number of bits to dump from the output buffer.
+ *
+ * @return Return 0 if successful, -1 else.
+ */
+typedef int(*dump_func_t)(struct data_output_t* data_output, int nb_bits);
+
+
 /**
  * Represent the output stream.
  */
-typedef struct {
-    int fd;                     /**< Where to write when dumping. */
+typedef struct data_output_t {
+    dump_func_t dump_func;      /**< Function used to dump the buffer. */
     uint8_t* buffer;            /**< Used to buffer written data. */
     int size;                   /**< Size of the buffer. */
     int write_size;             /**< Size of the written data in the buffer. */
@@ -31,6 +44,19 @@ typedef struct {
     uint8_t is_signed;          /**< Should the output be signed or not. */
 } data_output_t;
 
+/**
+ * Init the output to a file descriptor.
+ *
+ * @param data_output      The structure representing the output to fill out.
+ * @param fd               The output file descriptor.
+ * @param buffer_size      The size of the output buffer.
+ * @param is_little_endian Should the output be in little endian?
+ * @param is_signed        Should the output be signed?
+ * @param can_pause        Can the output be paused?
+ *
+ * @return Return 0 if successful, -1 else.
+ */
+int init_data_output_to_fd(data_output_t* data_output, int fd, int buffer_size, uint8_t is_little_endian, uint8_t is_signed, uint8_t can_pause);
 
 /**
  * We suppose that if value represent a signed integer then it is using two's
@@ -58,7 +84,7 @@ static inline DECODE_TYPE convert_to_signed(DECODE_UTYPE value, uint8_t size) {
 
 /**
  * Dump nb_bytes bytes from the output buffer to the output file descriptor
- * starting from 0. Nothing is modified within the data_output structure.
+ * starting from 0.
  *
  * @param data_output The output buffer and the output file descriptor are
  *                    there.
@@ -66,7 +92,11 @@ static inline DECODE_TYPE convert_to_signed(DECODE_UTYPE value, uint8_t size) {
  *
  * @return Return 0 if successful, -1 else.
  */
-int dump_buffer(data_output_t* data_output, int nb_bytes);
+static inline int dump_buffer(data_output_t* data_output, int nb_bytes) {
+
+    return data_output->dump_func(data_output, nb_bytes);
+
+}
 
 /**
  * Output a sample while taking care of its size, channel number, channel

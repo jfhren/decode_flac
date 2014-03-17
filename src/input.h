@@ -24,6 +24,17 @@ typedef struct {
 
 
 /**
+ * Init the input from a file descriptor.
+ *
+ * @param data_input  The structure representing the input to fill out.
+ * @param fd          The input file descriptor.
+ * @param buffer_size The size of the input buffer.
+ *
+ * @return Return 0 if successful, -1 else.
+ */
+int init_data_input_from_fd(data_input_t* data_input, int fd, int buffer_size);
+
+/**
  * Get the position in the input stream for later skipping back.
  *
  * @param data_input Bits and bytes are read from there.
