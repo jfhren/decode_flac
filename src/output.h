@@ -14,14 +14,15 @@
 struct data_output_t;
 
 /**
- * Dump nb_bits bits from the output buffer.
+ * Eventually dump the output buffer.
  *
  * @param data_output The output buffer is there.
- * @param nb_bits     The number of bits to dump from the output buffer.
+ * @param nb_bits     The number of bits added to the buffer since the last call.
+ * @param force_dump  Force the dumping of the buffer (usefull if it is the last call).
  *
  * @return Return 0 if successful, -1 else.
  */
-typedef int(*dump_func_t)(struct data_output_t* data_output, int nb_bits);
+typedef int(*dump_func_t)(struct data_output_t* data_output, int nb_bits, uint8_t force_dump);
 
 
 /**
@@ -31,7 +32,8 @@ typedef struct data_output_t {
     dump_func_t dump_func;      /**< Function used to dump the buffer. */
     uint8_t* buffer;            /**< Used to buffer written data. */
     int size;                   /**< Size of the buffer. */
-    int write_size;             /**< Size of the written data in the buffer. */
+    int write_size;             /**< Size of the written data in the buffer.
+                                     FIXME is that even usefull anymore ? */
     int starting_position;      /**< Where does the current frame start in the
                                      buffer. */
     uint8_t starting_shift;     /**< What was the current shift before the
@@ -83,18 +85,17 @@ static inline DECODE_TYPE convert_to_signed(DECODE_UTYPE value, uint8_t size) {
 }
 
 /**
- * Dump nb_bytes bytes from the output buffer to the output file descriptor
- * starting from 0.
+ * Eventually dump the output buffer using the setted dump function.
  *
- * @param data_output The output buffer and the output file descriptor are
- *                    there.
- * @param nb_bytes    The number of bytes to dump from the output buffer.
+ * @param data_output The output buffer is there.
+ * @param nb_bits     The number of bits added to the buffer since the last call.
+ * @param force_dump  Force the dumping of the buffer (usefull if it is the last call).
  *
  * @return Return 0 if successful, -1 else.
  */
-static inline int dump_buffer(data_output_t* data_output, int nb_bytes) {
+static inline int dump_buffer(data_output_t* data_output, int nb_bits, uint8_t force_dump) {
 
-    return data_output->dump_func(data_output, nb_bytes);
+    return data_output->dump_func(data_output, nb_bits, force_dump);
 
 }
 

@@ -1666,7 +1666,8 @@ static int decode_frame(data_input_t* data_input, data_output_t* data_output, ui
         nb_read_samples = crt_samples[0] - nb_read_samples;
 
         nb_bits_to_write = nb_read_samples * nb_channels * frame_info.bits_per_sample + data_output->starting_shift;
-        dump_buffer(data_output, nb_bits_to_write);
+        if(dump_buffer(data_output, nb_bits_to_write, 0) == -1)
+            return -1;
 
         nb_read_samples = crt_samples[0];
     } while(crt_samples[0] < frame_info.block_size);

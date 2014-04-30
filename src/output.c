@@ -23,15 +23,18 @@ static uint8_t g_can_pause = 0;
  * starting from 0.
  *
  * @param data_output The output buffer is there.
- * @param nb_bits    The number of bits to dump from the output buffer.
+ * @param nb_bits     The number of bits to dump from the output buffer.
+ * @param force_dump  Not used.
  *
  * @return Return 0 if successful, -1 else.
  */
-static int dump_buffer_to_fd(data_output_t* data_output, int nb_bits) {
+static int dump_buffer_to_fd(data_output_t* data_output, int nb_bits, uint8_t force_dump) {
 
     int nb_written_bytes_since_start = 0;
     int nb_written_bytes = 0;
     int nb_bytes = nb_bits / 8;
+
+    (void)force_dump;
 
     while((nb_written_bytes = write(g_output_fd, data_output->buffer + nb_written_bytes_since_start, nb_bytes - nb_written_bytes_since_start)) > 0) {
         nb_written_bytes_since_start += nb_written_bytes;
