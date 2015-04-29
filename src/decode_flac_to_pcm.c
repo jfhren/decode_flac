@@ -171,6 +171,9 @@ int main(int argc, char* argv[]) {
     if(decode_flac_data(&data_input, &data_output, stream_info.bits_per_sample, stream_info.nb_channels) == -1)
         return EXIT_FAILURE;
 
+    if ( data_input.read_size != data_input.position)
+        fprintf(stderr, "trailing data not decoded\n");
+
     if(!is_quiet)
         fprintf(stderr, "header md5: %.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x\n", stream_info.md5[0], stream_info.md5[1], stream_info.md5[2], stream_info.md5[3], stream_info.md5[4], stream_info.md5[5], stream_info.md5[6], stream_info.md5[7], stream_info.md5[8], stream_info.md5[9], stream_info.md5[10], stream_info.md5[11], stream_info.md5[12], stream_info.md5[13], stream_info.md5[14], stream_info.md5[15]);
 

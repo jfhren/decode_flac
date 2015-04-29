@@ -234,6 +234,8 @@ static int read_frame_header(data_input_t* data_input, uint8_t bits_per_sample, 
             return -1;
         if(error_code == 0)
             return 0;
+        if(data_input->read_size < 16)
+            return 0;
     }
 
     buffer = data_input->buffer;

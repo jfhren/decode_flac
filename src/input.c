@@ -160,6 +160,7 @@ int refill_input_buffer_at_least(data_input_t* data_input, int nb_needed_bytes) 
 int refill_input_buffer(data_input_t* data_input) {
 
     int nb_read_bytes = 0;
+    int relative_nb_read_bytes = 0;
     int total_nb_read_bytes = data_input->read_size - data_input->position;
     /* Try to read by the biggest chunk possible (might be silly though) */
     int nb_bytes_to_read = data_input->position;
@@ -185,10 +186,11 @@ int refill_input_buffer(data_input_t* data_input) {
         return -1;
     }
 
+    relative_nb_read_bytes = total_nb_read_bytes - (data_input->read_size - data_input->position);
     data_input->read_size = total_nb_read_bytes;
     data_input->position = 0;
 
-    if(data_input->read_size == 0)
+    if(data_input->read_size == 0 || relative_nb_read_bytes == 0)
         return 0;
 
     return 1;
@@ -324,6 +326,8 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
                 value = ((uint64_t)buffer[position] << 56) | ((uint64_t)buffer[position + 1] << 48) | ((uint64_t)buffer[position + 2] << 40) | ((uint64_t)buffer[position + 3] << 32) | (buffer[position + 4] << 24) | (buffer[position + 5] << 16) | (buffer[position + 6] << 8) | buffer[position + 7];
                 data_input->position += 8;
 #endif
+            default:
+            *error_code = -1;
         }
 
         return value;
@@ -444,6 +448,8 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
             data_input->position += 8;
             data_input->shift = nb_needed_bits - 64;
 #endif
+        default:
+        *error_code = -1;
     }
 
     return value;
