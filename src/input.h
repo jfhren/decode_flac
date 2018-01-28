@@ -22,6 +22,7 @@ typedef struct {
     uint8_t shift;      /**< The current bit shift inside the current byte. */
 } data_input_t;
 
+#define DATA_INPUT_INIT() {.fd = 0, .buffer = NULL, .size = 0, .read_size = 0, .position = 0, .shift = 0}
 
 /**
  * Init the input from a file descriptor.

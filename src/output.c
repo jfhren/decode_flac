@@ -433,11 +433,11 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
 #endif
                 }
             } else {
-                switch(sample_size) {
-                    DECODE_TYPE difference = 0;
-                    DECODE_UTYPE uleft = 0;
-                    DECODE_TYPE right = 0;
+                DECODE_TYPE difference = 0;
+                DECODE_UTYPE uleft = 0;
+                DECODE_TYPE right = 0;
 
+                switch(sample_size) {
 #ifdef DECODE_8_BITS
                     case 8:
                         difference = convert_to_signed((buffer[position - 1] << 1) | (buffer[position] & 0x01), 9);
@@ -633,12 +633,12 @@ int put_shifted_bits(data_output_t* data_output, DECODE_UTYPE sample, uint8_t sa
 #endif
                 }
             } else {
-                switch(sample_size) {
-                    DECODE_TYPE mid = 0;
-                    DECODE_TYPE side = 0;
-                    DECODE_UTYPE left = 0;
-                    DECODE_UTYPE right = 0;
+                DECODE_TYPE mid = 0;
+                DECODE_TYPE side = 0;
+                DECODE_UTYPE left = 0;
+                DECODE_UTYPE right = 0;
 
+                switch(sample_size) {
 #ifdef DECODE_8_BITS
                     case 9:
                         mid = convert_to_signed(buffer[position - 1], 8);

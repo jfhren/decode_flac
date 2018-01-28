@@ -44,6 +44,8 @@ typedef struct data_output_t {
     uint8_t is_signed;          /**< Should the output be signed or not. */
 } data_output_t;
 
+#define DATA_OUTPUT_INIT() {.dump_func = NULL, .buffer = NULL, .size = 0, .write_size = 0, .starting_position = 0, .starting_shift = 0, .position = 0, .shift = 0, .is_little_endian = 0, .is_signed = 0}
+
 /**
  * Init the output to a file descriptor.
  *

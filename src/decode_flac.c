@@ -734,12 +734,15 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
             switch(order) {
                 case 4:
                     INIT_ONE_WARMUP(data_input, subframe, 0, 1, error_code);
+                    /* FALLTHROUGH */
 
                 case 3:
                     INIT_ONE_WARMUP(data_input, subframe, order - 3, order - 2, error_code);
+                    /* FALLTHROUGH */
 
                 case 2:
                     INIT_ONE_WARMUP(data_input, subframe, order - 2, order - 1, error_code);
+                    /* FALLTHROUGH */
 
                 case 1:
                     INIT_ONE_WARMUP(data_input, subframe, order - 1, order, error_code);
@@ -796,12 +799,15 @@ static uint16_t decode_fixed(data_input_t* data_input, data_output_t* data_outpu
         switch(order - crt_sample) {
             case 4:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, 0, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 3:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 2:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 1:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
@@ -954,126 +960,157 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
             case 32:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 31:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 30:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 29:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 28:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 27:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 26:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 25:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 24:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 23:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 22:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 21:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 20:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 19:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 18:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 17:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 16:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 15:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 14:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 13:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 12:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 11:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 10:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 9:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 8:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 7:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 6:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 5:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 4:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 3:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 2:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
                 ++i;
+                /* FALLTHROUGH */
 
             case 1:
                 INIT_ONE_WARMUP(data_input, subframe, i, i + 1, error_code);
@@ -1101,96 +1138,127 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
         switch(order) {
             case 32:
                 INIT_ONE_COEFF(data_input, subframe, 0, error_code);
+                /* FALLTHROUGH */
 
             case 31:
                 INIT_ONE_COEFF(data_input, subframe, order - 31, error_code);
+                /* FALLTHROUGH */
 
             case 30:
                 INIT_ONE_COEFF(data_input, subframe, order - 30, error_code);
+                /* FALLTHROUGH */
 
             case 29:
                 INIT_ONE_COEFF(data_input, subframe, order - 29, error_code);
+                /* FALLTHROUGH */
 
             case 28:
                 INIT_ONE_COEFF(data_input, subframe, order - 28, error_code);
+                /* FALLTHROUGH */
 
             case 27:
                 INIT_ONE_COEFF(data_input, subframe, order - 27, error_code);
+                /* FALLTHROUGH */
 
             case 26:
                 INIT_ONE_COEFF(data_input, subframe, order - 26, error_code);
+                /* FALLTHROUGH */
 
             case 25:
                 INIT_ONE_COEFF(data_input, subframe, order - 25, error_code);
+                /* FALLTHROUGH */
 
             case 24:
                 INIT_ONE_COEFF(data_input, subframe, order - 24, error_code);
+                /* FALLTHROUGH */
 
             case 23:
                 INIT_ONE_COEFF(data_input, subframe, order - 23, error_code);
+                /* FALLTHROUGH */
 
             case 22:
                 INIT_ONE_COEFF(data_input, subframe, order - 22, error_code);
+                /* FALLTHROUGH */
 
             case 21:
                 INIT_ONE_COEFF(data_input, subframe, order - 21, error_code);
+                /* FALLTHROUGH */
 
             case 20:
                 INIT_ONE_COEFF(data_input, subframe, order - 20, error_code);
+                /* FALLTHROUGH */
 
             case 19:
                 INIT_ONE_COEFF(data_input, subframe, order - 19, error_code);
+                /* FALLTHROUGH */
 
             case 18:
                 INIT_ONE_COEFF(data_input, subframe, order - 18, error_code);
+                /* FALLTHROUGH */
 
             case 17:
                 INIT_ONE_COEFF(data_input, subframe, order - 17, error_code);
+                /* FALLTHROUGH */
 
             case 16:
                 INIT_ONE_COEFF(data_input, subframe, order - 16, error_code);
+                /* FALLTHROUGH */
 
             case 15:
                 INIT_ONE_COEFF(data_input, subframe, order - 15, error_code);
+                /* FALLTHROUGH */
 
             case 14:
                 INIT_ONE_COEFF(data_input, subframe, order - 14, error_code);
+                /* FALLTHROUGH */
 
             case 13:
                 INIT_ONE_COEFF(data_input, subframe, order - 13, error_code);
+                /* FALLTHROUGH */
 
             case 12:
                 INIT_ONE_COEFF(data_input, subframe, order - 12, error_code);
+                /* FALLTHROUGH */
 
             case 11:
                 INIT_ONE_COEFF(data_input, subframe, order - 11, error_code);
+                /* FALLTHROUGH */
 
             case 10:
                 INIT_ONE_COEFF(data_input, subframe, order - 10, error_code);
+                /* FALLTHROUGH */
 
             case 9:
                 INIT_ONE_COEFF(data_input, subframe, order - 9, error_code);
+                /* FALLTHROUGH */
 
             case 8:
                 INIT_ONE_COEFF(data_input, subframe, order - 8, error_code);
+                /* FALLTHROUGH */
 
             case 7:
                 INIT_ONE_COEFF(data_input, subframe, order - 7, error_code);
+                /* FALLTHROUGH */
 
             case 6:
                 INIT_ONE_COEFF(data_input, subframe, order - 6, error_code);
+                /* FALLTHROUGH */
 
             case 5:
                 INIT_ONE_COEFF(data_input, subframe, order - 5, error_code);
+                /* FALLTHROUGH */
 
             case 4:
                 INIT_ONE_COEFF(data_input, subframe, order - 4, error_code);
+                /* FALLTHROUGH */
 
             case 3:
                 INIT_ONE_COEFF(data_input, subframe, order - 3, error_code);
+                /* FALLTHROUGH */
 
             case 2:
                 INIT_ONE_COEFF(data_input, subframe, order - 2, error_code);
+                /* FALLTHROUGH */
 
             case 1:
                 INIT_ONE_COEFF(data_input, subframe, order - 1, error_code);
@@ -1236,96 +1304,127 @@ static uint16_t decode_lpc(data_input_t* data_input, data_output_t* data_output,
         switch(order - crt_sample) {
             case 32:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, 0, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 31:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 30:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 29:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 28:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 27:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 26:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 25:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 24:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 23:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 22:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 21:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 20:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 19:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 18:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 17:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 16:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 15:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 14:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 13:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 12:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 11:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 10:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 9:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 8:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 7:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 6:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 5:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 4:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 3:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 2:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
+                /* FALLTHROUGH */
 
             case 1:
                 OUTPUT_ONE_WARMUP(data_output, frame_info, subframe, channel_nb, crt_sample, crt_sample, error_code);
@@ -1360,126 +1459,157 @@ decode_lpc_subframe:;
             case 32:
                 ADD_TO_VALUE(subframe, crt, 31, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 31:
                 ADD_TO_VALUE(subframe, crt, 30, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 30:
                 ADD_TO_VALUE(subframe, crt, 29, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 29:
                 ADD_TO_VALUE(subframe, crt, 28, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 28:
                 ADD_TO_VALUE(subframe, crt, 27, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 27:
                 ADD_TO_VALUE(subframe, crt, 26, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 26:
                 ADD_TO_VALUE(subframe, crt, 25, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 25:
                 ADD_TO_VALUE(subframe, crt, 24, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 24:
                 ADD_TO_VALUE(subframe, crt, 23, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 23:
                 ADD_TO_VALUE(subframe, crt, 22, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 22:
                 ADD_TO_VALUE(subframe, crt, 21, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 21:
                 ADD_TO_VALUE(subframe, crt, 20, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 20:
                 ADD_TO_VALUE(subframe, crt, 19, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 19:
                 ADD_TO_VALUE(subframe, crt, 18, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 18:
                 ADD_TO_VALUE(subframe, crt, 17, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 17:
                 ADD_TO_VALUE(subframe, crt, 16, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 16:
                 ADD_TO_VALUE(subframe, crt, 15, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 15:
                 ADD_TO_VALUE(subframe, crt, 14, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 14:
                 ADD_TO_VALUE(subframe, crt, 13, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 13:
                 ADD_TO_VALUE(subframe, crt, 12, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 12:
                 ADD_TO_VALUE(subframe, crt, 11, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 11:
                 ADD_TO_VALUE(subframe, crt, 10, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 10:
                 ADD_TO_VALUE(subframe, crt, 9, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 9:
                 ADD_TO_VALUE(subframe, crt, 8, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 8:
                 ADD_TO_VALUE(subframe, crt, 7, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 7:
                 ADD_TO_VALUE(subframe, crt, 6, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 6:
                 ADD_TO_VALUE(subframe, crt, 5, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 5:
                 ADD_TO_VALUE(subframe, crt, 4, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 4:
                 ADD_TO_VALUE(subframe, crt, 3, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 3:
                 ADD_TO_VALUE(subframe, crt, 2, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 2:
                 ADD_TO_VALUE(subframe, crt, 1, value);
                 crt = crt->next;
+                /* FALLTHROUGH */
 
             case 1:
                 ADD_TO_VALUE(subframe, crt, 0, value);

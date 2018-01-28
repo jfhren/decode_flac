@@ -17,8 +17,8 @@ int main(int argc, char* argv[]) {
         {"input-size",      required_argument, NULL, 's'},
         {NULL,                     0,                 NULL,  0 }
     };
-    data_input_t data_input = {0};
-    stream_info_t stream_info = {0};
+    data_input_t data_input = DATA_INPUT_INIT();
+    stream_info_t stream_info = STREAM_INFO_INIT();
 
     int input_buffer_size = 1024;
     int input_fd = -1;

@@ -92,6 +92,12 @@ typedef struct {
     uint8_t md5[16];            /**< The md5 of the original pcm */
 } stream_info_t;
 
+#ifndef DISALLOW_64_BITS
+#define STREAM_INFO_INIT() {.min_block_size = 0, .max_block_size = 0, .min_frame_size = 0, .max_frame_size = 0, .sample_rate = 0, .nb_channels = 0, .bits_per_sample = 0, .nb_samples = 0, .md5 = {0}}
+#else
+#define STREAM_INFO_INIT() {.min_block_size = 0, .max_block_size = 0, .min_frame_size = 0, .max_frame_size = 0, .sample_rate = 0, .nb_channels = 0, .bits_per_sample = 0, .md5 = {0}}
+#endif
+
 /**
  * Decode the flac metedata stream info and skip the others.
  *

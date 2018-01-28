@@ -304,9 +304,9 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
             case 32:
                 value = (buffer[position] << 24) | (buffer[position + 1] << 16) | (buffer[position + 2] << 8) | buffer[position + 3];
                 data_input->position += 4;
-#ifndef DISALLOW_64_BITS
                 return value;
 
+#ifndef DISALLOW_64_BITS
             case 40:
                 value = ((uint64_t)buffer[position] << 32) | (buffer[position + 1] << 24) | (buffer[position + 2] << 16) | (buffer[position + 3] << 8) | buffer[position + 4];
                 data_input->position += 5;
@@ -325,7 +325,9 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
             case 64:
                 value = ((uint64_t)buffer[position] << 56) | ((uint64_t)buffer[position + 1] << 48) | ((uint64_t)buffer[position + 2] << 40) | ((uint64_t)buffer[position + 3] << 32) | (buffer[position + 4] << 24) | (buffer[position + 5] << 16) | (buffer[position + 6] << 8) | buffer[position + 7];
                 data_input->position += 8;
+                return value;
 #endif
+
             default:
             *error_code = -1;
         }
@@ -381,9 +383,9 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
             value = ((buffer[position] & (0xFF >> shift)) << (nb_needed_bits - 8)) | (buffer[position + 1] << (nb_needed_bits - 16)) | (buffer[position + 2] << (nb_needed_bits - 24)) | (buffer[position + 3] >> (32 - nb_needed_bits));
             data_input->position += 3;
             data_input->shift = nb_needed_bits - 24;
-#ifndef DISALLOW_64_BITS
             return value;
 
+#ifndef DISALLOW_64_BITS
         case 32:
         case 33:
         case 34:
@@ -447,7 +449,9 @@ uint64_t get_shifted_bits(data_input_t* data_input, uint8_t requested_size, int*
             value = ((uint64_t)(buffer[position] & (0xFF >> shift))  << (nb_needed_bits - 8)) | ((uint64_t)buffer[position + 1] << (nb_needed_bits - 16)) | ((uint64_t)buffer[position + 2] << (nb_needed_bits - 24)) | ((uint64_t)buffer[position + 3] << (nb_needed_bits - 32)) | (buffer[position + 4] << (nb_needed_bits - 40)) | (buffer[position + 5] << (nb_needed_bits - 48)) | (buffer[position + 6] << (nb_needed_bits - 56)) | (buffer[position + 7] << (nb_needed_bits - 64)) | (buffer[position + 8] >> (72 - nb_needed_bits));
             data_input->position += 8;
             data_input->shift = nb_needed_bits - 64;
+            return value;
 #endif
+
         default:
         *error_code = -1;
     }

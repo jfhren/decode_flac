@@ -31,9 +31,9 @@ int main(int argc, char* argv[]) {
         {"max-output-size", required_argument, NULL, 'o'},
         {NULL,                     0,                 NULL,  0 }
     };
-    data_input_t data_input = {0};
-    data_output_t data_output = {0};
-    stream_info_t stream_info = {0};
+    data_input_t data_input = DATA_INPUT_INIT();
+    data_output_t data_output = DATA_OUTPUT_INIT();
+    stream_info_t stream_info = STREAM_INFO_INIT();
 
     int input_buffer_size = 1024;
     int input_fd = -1;
@@ -103,7 +103,9 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "sample_rate: %u\n", stream_info.sample_rate);
         fprintf(stderr, "nb_channels: %u\n", stream_info.nb_channels);
         fprintf(stderr, "bits_per_sample: %u\n", stream_info.bits_per_sample);
+#ifndef DISALLOW_64_BITS
         fprintf(stderr, "nb_samples: %" PRIu64 "\n", stream_info.nb_samples);
+#endif
     }
 
 #ifndef DECODE_8_BITS
